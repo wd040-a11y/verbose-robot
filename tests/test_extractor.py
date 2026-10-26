@@ -92,7 +92,7 @@ def test_G_corrupt_json_continues(mv):
  result=(_extraction := Extractor().run(root,out)); out=Path(_extraction["output_folder"])
  assert result["errors"]>=1 and result["output_counts"]["maps"]==1 and result["schema_valid"]
  assert result["state"]=="partial"
- assert (out/"source_archive/data/Map002.json").read_text()=="{bad"
+ assert (out/"source_archive/data/Map002.json").read_text(encoding="utf-8")=="{bad"
  assert any(x["code"]=="json_parse_failed" for x in data(out,"reports/warnings.json"))
 
 def test_H_large_project(tmp_path):
@@ -104,7 +104,7 @@ def test_H_large_project(tmp_path):
  assert result["output_counts"]["events"]==601 and result["output_counts"]["commands"]>17000
  assert result["source_counts"]==result["output_counts"] and result["schema_valid"]
  assert peak<300*1024*1024
- (tmp_path/"performance.json").write_text(json.dumps({"elapsed_seconds":elapsed,"peak_tracemalloc_bytes":peak}))
+ (tmp_path/"performance.json").write_text(json.dumps({"elapsed_seconds":elapsed,"peak_tracemalloc_bytes":peak}), encoding="utf-8")
  print(f"\nlarge: events=601 commands={result['output_counts']['commands']} seconds={elapsed:.2f} peak={peak/1024**2:.1f} MiB")
 
 def test_I_all_schemas_and_mutation(exported):

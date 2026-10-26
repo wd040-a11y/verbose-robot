@@ -35,8 +35,8 @@ def create_ace(root):
     from PIL import Image
     root=Path(root); data=root/'Data'; data.mkdir(parents=True,exist_ok=True)
     (root/'Game.exe').write_bytes(b'fixture, not executable')
-    (root/'Game.ini').write_text('[Game]\nLibrary=System/RGSS301.dll\nScripts=Data/Scripts.rvdata2\nTitle=테스트 日本語\n')
-    (root/'Game.rvproj2').write_text('RPGVXAce 1.00')
+    (root/'Game.ini').write_text('[Game]\nLibrary=System/RGSS301.dll\nScripts=Data/Scripts.rvdata2\nTitle=테스트 日本語\n', encoding="utf-8")
+    (root/'Game.rvproj2').write_text('RPGVXAce 1.00', encoding="utf-8")
     save(root/'Save01.rvdata2',{'save':'ignored'})
     save(data/'System.rvdata2',Obj('RPG::System',game_title='테스트 日本語',switches=['','문 열림'],variables=['','호감도'],sounds=[]))
     save(data/'MapInfos.rvdata2',{1:Obj('RPG::MapInfo',name='시작',parent_id=0,order=1)})

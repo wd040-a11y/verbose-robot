@@ -29,7 +29,7 @@ def test_A_ace_real_binary_conversion(tmp_path):
     assert 'switch:1' in refs and 'variable:1' in refs and 'common_event:1' in refs
     assert any(c['enabled'] and c['kind']=='switch' for c in page['condition_checks'])
     scripts=data(out,'normalized/scripts.json');assert scripts[0]['status']=='decompressed'
-    assert '절대 실행 금지' in (out/scripts[0]['source_path']).read_text()
+    assert '절대 실행 금지' in (out/scripts[0]['source_path']).read_text(encoding="utf-8")
     assert data(out,'normalized/assets.json')[0]['category']=='images'
     assert not any('Save01' in r['path'] for r in data(out,'normalized/source_inventory.json'))
     assert all(hashlib.sha256(p.read_bytes()).hexdigest()==h for p,h in before.items())
@@ -38,9 +38,9 @@ def test_A_ace_real_binary_conversion(tmp_path):
 @pytest.mark.parametrize('entry', ['index','none'])
 def test_B_mixed_engine(tmp_path,entry):
     root,_=create_game(tmp_path/'game','MV')
-    (root/'js/rmmz_core.js').write_text('// leftover')
-    (root/'js/rmmz_objects.js').write_text('// leftover')
-    (root/'index.html').write_text('<script src="js/rpg_core.js"></script>' if entry=='index' else '')
+    (root/'js/rmmz_core.js').write_text('// leftover', encoding="utf-8")
+    (root/'js/rmmz_objects.js').write_text('// leftover', encoding="utf-8")
+    (root/'index.html').write_text('<script src="js/rpg_core.js"></script>' if entry=='index' else '', encoding="utf-8")
     c=discover(root)[0];assert c.engine==('MV' if entry=='index' else 'MV_MZ')
     out,r=run(root,tmp_path);assert r['schema_valid'] and r['output_counts']['events']==2
 
@@ -49,12 +49,12 @@ def test_C_D_E_G_K_output(tmp_path,monkeypatch,base_kind):
     root=create_ace(tmp_path/'한글 日本語 [ ]')
     bases={'parent':tmp_path,'self':root,'existing':tmp_path/'occupied','default':None}
     base=bases[base_kind]
-    if base: base.mkdir(exist_ok=True); (base/'keep.txt').write_text('keep')
+    if base: base.mkdir(exist_ok=True); (base/'keep.txt').write_text('keep', encoding="utf-8")
     monkeypatch.setattr('rpgextractor.output.default_base',lambda:tmp_path/'documents')
     first,r=run(root,base);second,r2=run(root,base)
     assert first!=second and r['schema_valid'] and r2['schema_valid']
     assert len(discover(root))==1
-    if base: assert (base/'keep.txt').read_text()=='keep'
+    if base: assert (base/'keep.txt').read_text(encoding="utf-8")=='keep'
 
 @pytest.mark.parametrize('selection',['root','data','map','project'])
 def test_input_selection(tmp_path,selection):
@@ -70,7 +70,7 @@ def test_I_archive_only_and_resource_link(tmp_path):
     assert discover(arc)[0].archive==arc
     out,r=run(arc,tmp_path/'out');assert r['schema_valid'] and r['output_counts']['events']==1
     assert data(out,'manifest.json')['archive_sha256']==hashlib.sha256(arc.read_bytes()).hexdigest()
-    refs=[json.loads(x)['data'] for x in (out/'normalized/references.jsonl').read_text().splitlines()]
+    refs=[json.loads(x)['data'] for x in (out/'normalized/references.jsonl').read_text(encoding="utf-8").splitlines()]
     assert next(x for x in refs if x['target_id']=='img/pictures/scene')['resolved_ids']
 
 @pytest.mark.parametrize('name',['../escape','C:/escape','Data/../../escape','/absolute','NUL.txt','Data/x.'])
