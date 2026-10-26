@@ -1,0 +1,24 @@
+{
+  "engine": "MV",
+  "maps": 42,
+  "events": 488,
+  "pages": 1181,
+  "completed": 671,
+  "blocked": 510,
+  "bounded": 0,
+  "textSteps": 3260,
+  "choices": 45,
+  "blocks": {
+    "111": 21,
+    "122": 2,
+    "205": 185,
+    "211": 72,
+    "322": 10,
+    "356": 220
+  },
+  "notes": [
+    "Initial-state traversal with first choice; not exhaustive path coverage.",
+    "No scripts or plugins executed. Images intentionally absent.",
+    "No proprietary dialogue or filenames included."
+  ]
+}
