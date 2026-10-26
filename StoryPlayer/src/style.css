@@ -1,1 +1,102 @@
-:root{font-family:system-ui,sans-serif;color:#e4eaf3;background:#10151e}body{margin:0;padding:24px;max-width:1600px;margin:auto}h1{letter-spacing:-1px}p,small{color:#a6b5cb}main{display:grid;grid-template-columns:220px 340px 1fr;gap:18px}section{background:#1a2230;border:1px solid #334158;border-radius:12px;padding:16px;margin-bottom:16px}main section{min-height:420px;max-height:70vh;overflow:auto}button,input,select{font:inherit;border:1px solid #435776;border-radius:6px;padding:9px;margin:4px;color:inherit;background:#25334a}button{cursor:pointer}button:hover{background:#35527a}button:focus{outline:2px solid #8cb8ff}article{border-bottom:1px solid #34445c;padding:12px 0}small,strong{display:block}label{display:flex;justify-content:space-between;gap:8px;padding:5px}label input{max-width:90px}img{max-width:100%;max-height:320px}#app main section:last-child{white-space:pre-wrap}main section:first-child button{display:block;width:95%}@media(max-width:900px){body{padding:10px}main{grid-template-columns:1fr}main section{min-height:unset;max-height:50vh}button{min-height:44px}input,select{max-width:95%}}
+:root {
+  font-family: system-ui, sans-serif;
+  color: #e4eaf3;
+  background: #10151e;
+}
+body {
+  margin: 0;
+  padding: 24px;
+  max-width: 1600px;
+  margin: auto;
+}
+h1 {
+  letter-spacing: -1px;
+}
+p,
+small {
+  color: #a6b5cb;
+}
+main {
+  display: grid;
+  grid-template-columns: 220px 340px 1fr;
+  gap: 18px;
+}
+section {
+  background: #1a2230;
+  border: 1px solid #334158;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+main section {
+  min-height: 420px;
+  max-height: 70vh;
+  overflow: auto;
+}
+button,
+input,
+select {
+  font: inherit;
+  border: 1px solid #435776;
+  border-radius: 6px;
+  padding: 9px;
+  margin: 4px;
+  color: inherit;
+  background: #25334a;
+}
+button {
+  cursor: pointer;
+}
+button:hover {
+  background: #35527a;
+}
+button:focus {
+  outline: 2px solid #8cb8ff;
+}
+article {
+  border-bottom: 1px solid #34445c;
+  padding: 12px 0;
+}
+small,
+strong {
+  display: block;
+}
+label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px;
+}
+label input {
+  max-width: 90px;
+}
+img {
+  max-width: 100%;
+  max-height: 320px;
+}
+#app main section:last-child {
+  white-space: pre-wrap;
+}
+main section:first-child button {
+  display: block;
+  width: 95%;
+}
+@media (max-width: 900px) {
+  body {
+    padding: 10px;
+  }
+  main {
+    grid-template-columns: 1fr;
+  }
+  main section {
+    min-height: unset;
+    max-height: 50vh;
+  }
+  button {
+    min-height: 44px;
+  }
+  input,
+  select {
+    max-width: 95%;
+  }
+}
