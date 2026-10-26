@@ -1,0 +1,2084 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rpgextract:package:1.1.0",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.1.0"
+    },
+    "engine": {
+      "enum": [
+        "MV",
+        "MZ",
+        "MV_MZ",
+        "VXACE"
+      ]
+    },
+    "game_id": {
+      "type": "string"
+    },
+    "package_id": {
+      "type": "string"
+    },
+    "data_type": {
+      "enum": [
+        "scripts",
+        "manifest",
+        "game",
+        "map_shard",
+        "common_event_shard",
+        "troop_shard",
+        "maps",
+        "events",
+        "common_events",
+        "troops",
+        "database",
+        "database_index",
+        "switches",
+        "variables",
+        "reference",
+        "reference_index",
+        "plugins",
+        "assets",
+        "relations",
+        "source_inventory",
+        "enrichment",
+        "overview",
+        "switch_usage",
+        "variable_usage",
+        "event_chunk",
+        "text_record",
+        "usage_context",
+        "issues",
+        "report",
+        "comparisons",
+        "unresolved",
+        "unsupported",
+        "opaque",
+        "integrity",
+        "validation"
+      ]
+    },
+    "data": {}
+  },
+  "required": [
+    "schema_version",
+    "engine",
+    "game_id",
+    "package_id",
+    "data_type",
+    "data"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "command": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string"
+        },
+        "raw": {},
+        "contexts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "block_id": {
+                "type": "string"
+              },
+              "branch_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "block_id",
+              "branch_id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "plugin": {
+          "type": "object"
+        },
+        "semantic": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "index",
+        "kind",
+        "raw",
+        "contexts"
+      ],
+      "additionalProperties": false
+    },
+    "page": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "page_index": {
+          "type": "integer"
+        },
+        "raw_unparsed": {},
+        "raw_metadata": {
+          "type": "object"
+        },
+        "list_present": {
+          "type": "boolean"
+        },
+        "condition_checks": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "selection_priority": {
+          "type": "integer"
+        },
+        "trigger": {},
+        "priority_type": {},
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command"
+          }
+        },
+        "text_groups": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "flow_blocks": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "page_index"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "raw_unparsed"
+          ],
+          "not": {
+            "required": [
+              "commands"
+            ]
+          }
+        },
+        {
+          "required": [
+            "raw_metadata",
+            "commands",
+            "list_present",
+            "condition_checks",
+            "text_groups",
+            "choices",
+            "flow_blocks"
+          ]
+        }
+      ]
+    },
+    "event": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "raw_unparsed": {},
+        "source": {
+          "type": "object"
+        },
+        "classification": {
+          "type": "null"
+        },
+        "raw_metadata": {
+          "type": "object"
+        },
+        "pages_present": {
+          "type": "boolean"
+        },
+        "position": {
+          "type": "object"
+        },
+        "page_selection": {
+          "const": "highest_satisfied_page_index"
+        },
+        "pages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/page"
+          }
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "raw_unparsed"
+          ],
+          "not": {
+            "required": [
+              "pages"
+            ]
+          }
+        },
+        {
+          "required": [
+            "raw_metadata",
+            "pages",
+            "source",
+            "pages_present",
+            "page_selection"
+          ]
+        }
+      ]
+    },
+    "reference": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "owner_id": {
+          "type": "string"
+        },
+        "command_index": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "target_kind": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "object"
+        },
+        "resolved_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resolution": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "event_id",
+        "owner_id",
+        "command_index",
+        "target_kind",
+        "target_id",
+        "role",
+        "detail",
+        "resolved_ids"
+      ],
+      "additionalProperties": false
+    },
+    "issue": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "warning",
+            "error"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "path",
+        "message",
+        "severity"
+      ],
+      "additionalProperties": false
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string"
+        },
+        "schema_valid": {
+          "type": "boolean"
+        },
+        "source_counts": {
+          "type": "object"
+        },
+        "output_counts": {
+          "type": "object"
+        },
+        "switches": {
+          "type": "integer"
+        },
+        "variables": {
+          "type": "integer"
+        },
+        "images": {
+          "type": "integer"
+        },
+        "assets": {
+          "type": "integer"
+        },
+        "decrypted": {
+          "type": "integer"
+        },
+        "asset_failures": {
+          "type": "integer"
+        },
+        "plugins": {
+          "type": "integer"
+        },
+        "errors": {
+          "type": "integer"
+        },
+        "warnings": {
+          "type": "integer"
+        },
+        "unknown_commands": {
+          "type": "integer"
+        },
+        "opaque_operations": {
+          "type": "integer"
+        },
+        "output_folder": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "schema_valid",
+        "source_counts",
+        "output_counts",
+        "switches",
+        "variables",
+        "images",
+        "assets",
+        "decrypted",
+        "asset_failures",
+        "plugins",
+        "errors",
+        "warnings",
+        "unknown_commands",
+        "opaque_operations",
+        "output_folder"
+      ],
+      "additionalProperties": false
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "name": {},
+        "initial_value": {},
+        "reference_count": {
+          "type": "integer"
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "used_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "number",
+        "name",
+        "initial_value",
+        "reference_count",
+        "references",
+        "used_by"
+      ],
+      "additionalProperties": false
+    },
+    "plugin": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {},
+        "load_index": {
+          "type": "integer"
+        },
+        "enabled": {},
+        "parameters": {},
+        "raw": {
+          "type": "object"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "source_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "archive_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "settings_source": {
+          "type": "string"
+        },
+        "command_calls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "load_index",
+        "enabled",
+        "parameters",
+        "raw",
+        "exists",
+        "source_path",
+        "archive_path",
+        "settings_source"
+      ],
+      "additionalProperties": false
+    },
+    "asset": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "indexed",
+            "copied",
+            "decrypted",
+            "copy_disabled",
+            "decryption_disabled",
+            "unsupported_encryption",
+            "failed"
+          ]
+        },
+        "category": {
+          "type": "string"
+        },
+        "output_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "logical_path": {
+          "type": "string"
+        },
+        "original_extension": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "output_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dimensions": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer"
+          }
+        },
+        "detected_format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "encryption": {
+          "type": "string"
+        },
+        "original_archive_path": {
+          "type": "string"
+        },
+        "reference_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "used_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "source_path",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "annotation": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "character_name",
+            "event_title",
+            "story_time",
+            "time_of_day",
+            "event_order",
+            "switch_meaning",
+            "variable_meaning",
+            "event_classification",
+            "ending_condition",
+            "state_preset"
+          ]
+        },
+        "value": {},
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "target_id",
+        "kind",
+        "value",
+        "evidence_ids"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "scripts"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {},
+                "name": {},
+                "order": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "status": {
+                  "enum": [
+                    "failed",
+                    "decompressed"
+                  ]
+                },
+                "source_path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "references": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "order",
+                "status",
+                "source_path",
+                "references"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "manifest"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "tool_version": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "in_progress",
+                  "complete",
+                  "complete_with_issues",
+                  "partial",
+                  "invalid",
+                  "cancelled",
+                  "failed"
+                ]
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "engine_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source_root": {
+                "type": "string"
+              },
+              "adapter_version": {
+                "type": "string"
+              },
+              "archive_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "options": {
+                "type": "object"
+              },
+              "schema": {
+                "type": "string"
+              },
+              "entrypoints": {
+                "type": "object"
+              },
+              "id_convention": {
+                "type": "object"
+              },
+              "key_policy": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool_version",
+              "state",
+              "created_at",
+              "engine_version",
+              "source_root",
+              "adapter_version",
+              "archive_sha256",
+              "options",
+              "schema",
+              "entrypoints",
+              "id_convention",
+              "key_policy"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "game"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "title": {},
+              "system": {
+                "type": "object"
+              },
+              "engine_detection": {
+                "type": "object"
+              },
+              "state_origin": {
+                "type": "string"
+              },
+              "initial_switch_value": {
+                "const": false
+              },
+              "initial_variable_value": {
+                "const": 0
+              }
+            },
+            "required": [
+              "title",
+              "system",
+              "engine_detection",
+              "state_origin",
+              "initial_switch_value",
+              "initial_variable_value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "map_shard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "source_file": {
+                "type": "string"
+              },
+              "raw_map": {
+                "type": "object"
+              },
+              "tiles_preserved": {
+                "type": "boolean"
+              },
+              "event_array_length": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/event"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "source_file",
+              "raw_map",
+              "tiles_preserved",
+              "event_array_length",
+              "events"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "common_event_shard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object"
+              },
+              "raw_metadata": {
+                "type": "object"
+              },
+              "page": {
+                "$ref": "#/$defs/page"
+              }
+            },
+            "required": [
+              "id",
+              "source",
+              "raw_metadata",
+              "page"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "troop_shard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/event"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "maps"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "map_id": {
+                  "type": "integer"
+                },
+                "name": {},
+                "map_info": {},
+                "display_name": {},
+                "source_file": {
+                  "type": "string"
+                },
+                "width": {},
+                "height": {},
+                "event_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "map_id",
+                "name",
+                "map_info",
+                "display_name",
+                "source_file",
+                "width",
+                "height",
+                "event_ids",
+                "file"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "events"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {},
+                "map_id": {
+                  "type": "integer"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "pointer": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "map_id",
+                "file",
+                "pointer"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "common_events"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {},
+                "trigger": {},
+                "switch_id": {},
+                "file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "trigger",
+                "switch_id",
+                "file"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "troops"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {},
+                "file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "file"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "database"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "source_file": {
+                "type": "string"
+              },
+              "records": {}
+            },
+            "required": [
+              "source_file",
+              "records"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "database_index"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "file"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "switches"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/usage"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "variables"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/usage"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "reference"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/reference"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "reference_index"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "by_target": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "by_source": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "records_file": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "by_target",
+              "by_source",
+              "records_file"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "plugins"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/plugin"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "assets"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/asset"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "relations"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "common_event_calls": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "common_event_callers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "map_connections": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "dependency_rule": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "common_event_calls",
+              "common_event_callers",
+              "map_connections",
+              "dependency_rule"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "source_inventory"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "size_bytes": {
+                  "type": "integer"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "archive_path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "representation": {
+                  "enum": [
+                    "not_archived",
+                    "exact_bytes",
+                    "redacted_json"
+                  ]
+                },
+                "redacted_fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "size_bytes",
+                "sha256",
+                "archive_path",
+                "representation"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "enrichment"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "annotations": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/annotation"
+                }
+              }
+            },
+            "required": [
+              "annotations"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "overview"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "title": {},
+              "counts": {
+                "type": "object"
+              },
+              "maps": {
+                "type": "string"
+              },
+              "actors": {
+                "type": "string"
+              },
+              "database": {
+                "type": "string"
+              },
+              "relations": {
+                "type": "string"
+              },
+              "switches": {
+                "type": "string"
+              },
+              "variables": {
+                "type": "string"
+              },
+              "common_events": {
+                "type": "string"
+              },
+              "plugins": {
+                "type": "string"
+              },
+              "event_index": {
+                "type": "string"
+              },
+              "opaque_count": {
+                "type": "integer"
+              },
+              "instructions": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "counts",
+              "maps",
+              "actors",
+              "database",
+              "relations",
+              "switches",
+              "variables",
+              "common_events",
+              "plugins",
+              "event_index",
+              "opaque_count",
+              "instructions"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "switch_usage"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "integer"
+                    },
+                    "name": {},
+                    "initial_value": {},
+                    "reference_count": {
+                      "type": "integer"
+                    },
+                    "references": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "used_by": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "number",
+                    "name",
+                    "initial_value",
+                    "reference_count",
+                    "references",
+                    "used_by"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "usages"
+                  ],
+                  "properties": {
+                    "usages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "variable_usage"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "integer"
+                    },
+                    "name": {},
+                    "initial_value": {},
+                    "reference_count": {
+                      "type": "integer"
+                    },
+                    "references": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "used_by": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "number",
+                    "name",
+                    "initial_value",
+                    "reference_count",
+                    "references",
+                    "used_by"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "usages"
+                  ],
+                  "properties": {
+                    "usages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "event_chunk"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "event_id": {
+                "type": "string"
+              },
+              "page_id": {
+                "type": "string"
+              },
+              "source_shard": {
+                "type": "string"
+              },
+              "command_start": {
+                "type": "integer"
+              },
+              "command_end_exclusive": {
+                "type": "integer"
+              },
+              "commands": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/command"
+                }
+              },
+              "page_conditions": {},
+              "flow_blocks": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "text_groups": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "reference_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "event_id",
+              "page_id",
+              "source_shard",
+              "command_start",
+              "command_end_exclusive",
+              "commands",
+              "page_conditions",
+              "flow_blocks",
+              "text_groups",
+              "reference_ids"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "text_record"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "event_id": {
+                "type": "string"
+              },
+              "page_id": {
+                "type": "string"
+              },
+              "source_shard": {
+                "type": "string"
+              },
+              "group": {
+                "type": "object"
+              },
+              "choice": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "event_id",
+              "page_id",
+              "source_shard"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "usage_context"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "owner_id": {
+                "type": "string"
+              },
+              "source_shard": {
+                "type": "string"
+              },
+              "reference_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "commands": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/command"
+                }
+              },
+              "text_groups": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            },
+            "required": [
+              "owner_id",
+              "source_shard",
+              "reference_ids",
+              "commands",
+              "text_groups"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "issues"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/issue"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "report"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/report"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "comparisons"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_id": {
+                  "type": "string"
+                },
+                "raw_equal": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "source_id",
+                "raw_equal"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "unresolved"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "reference_id": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "reference_id",
+                "target",
+                "source_id",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "unsupported"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_id": {
+                  "type": "string"
+                },
+                "event_id": {
+                  "type": "string"
+                },
+                "code": {},
+                "reason": {
+                  "type": "string"
+                },
+                "raw_preserved": {
+                  "const": true
+                }
+              },
+              "required": [
+                "source_id",
+                "event_id",
+                "code",
+                "reason",
+                "raw_preserved"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "opaque"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source_id",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "integrity"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "events_compared": {
+                "type": "integer"
+              },
+              "all_raw_equal": {
+                "type": "boolean"
+              },
+              "counts_equal": {
+                "type": "boolean"
+              },
+              "mismatches": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            },
+            "required": [
+              "events_compared",
+              "all_raw_equal",
+              "counts_equal",
+              "mismatches"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "validation"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "valid": {
+                "type": "boolean"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "valid",
+              "errors"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ]
+}

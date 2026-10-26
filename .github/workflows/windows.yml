@@ -1,0 +1,39 @@
+name: Windows executable and GUI verification
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e ".[gui,dev]"
+      - run: python -m pytest -q --junitxml=build/windows-evidence/tests.xml
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - run: python -m PyInstaller --noconfirm --clean --windowed --onedir --name RPGMakerExtractor --paths src --collect-data rpgextractor --hidden-import PySide6.QtTest launch_gui.py
+      - run: python -m tools.prepare_smoke
+      - run: python tools/verify_windows.py
+      - name: Include usage guide and dependency licenses
+        shell: pwsh
+        run: |
+          Copy-Item README.md,LICENSE dist/RPGMakerExtractor/
+          Copy-Item docs dist/RPGMakerExtractor/docs -Recurse
+          python -m pip freeze | Out-File dist/RPGMakerExtractor/BUILD_DEPENDENCIES.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RPGMakerExtractor-Windows-x64
+          path: dist/RPGMakerExtractor
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-validation-evidence
+          path: build/windows-evidence

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rpg-maker-extractor"
+version = "0.2.0.dev0"
+description = "Loss-aware local RPG Maker MV/MZ/VX Ace data extractor"
+requires-python = ">=3.11"
+dependencies = ["jsonschema>=4.23,<5", "Pillow>=10.4,<13"]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.7,<7"]
+dev = ["pytest>=8,<10", "pyinstaller>=6,<7"]
+
+[project.scripts]
+rpg-extract = "rpgextractor.cli:main"
+
+[project.gui-scripts]
+rpg-extractor-gui = "rpgextractor.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rpgextractor = ["schemas/*.json"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
