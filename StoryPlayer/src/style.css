@@ -100,3 +100,7 @@ main section:first-child button {
     max-width: 95%;
   }
 }
+
+* { box-sizing: border-box; }
+main, main section { min-width: 0; }
+input, select { max-width: 100%; }

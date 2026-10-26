@@ -34,6 +34,8 @@ jobs:
         run: node e2e/player.mjs
         env:
           PLAYER_EXE: release/win-unpacked/RPGStoryPlayer.exe
+      - name: Verify portable launcher has no console
+        run: ./scripts/verify-portable.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: RPGStoryPlayer-Windows
