@@ -41,6 +41,7 @@ try{
  await dialog.getByText('검사 결과',{exact:true}).click();
  await expect(dialog.locator('pre')).toContainText('dialoguePages');
  await dialog.getByRole('button',{name:'닫기',exact:true}).click();
+ await page.getByText('감상 설정 / 실행 정보',{exact:true}).click();
  await expect(page.locator('article').filter({hasText:'시스템 전용'})).toHaveCount(0);
  const cgOnly=page.locator('article').filter({hasText:'CG 전용'});
  await cgOnly.getByRole('button',{name:'감상하기',exact:true}).click();
