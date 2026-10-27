@@ -93,6 +93,7 @@ try {
   await page.getByPlaceholder("이미지 이름 / 경로 검색").fill("Faces");
   await page
     .locator(".image-row")
+    .filter({ hasText: "img/faces/Faces" })
     .getByRole("button", { name: "미리보기", exact: true })
     .click();
   await page.locator(".image-preview img").waitFor();
