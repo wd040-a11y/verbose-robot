@@ -13,9 +13,9 @@ export function normalizePath(path) {
 const fold = (p) => normalizePath(p).toLowerCase();
 export function resourceIndex(assets) {
   const index = new Map();
-  for (const a of assets.filter((x) => x.category === "images")) {
+  for (const a of assets.filter((x) => ["images","movies"].includes(x.category))) {
     const candidates = [a.output_path, a.source_path];
-    for (const ext of [".png", ".jpg", ".jpeg", ".webp"])
+    for (const ext of [".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm"])
       candidates.push(a.logical_path + ext);
     if (a.source_path) {
       const stem = a.source_path.replace(/\.(rpgmvp_?|png_)$/i, "");
@@ -71,6 +71,12 @@ export async function inspectImage(blob) {
     mime = "image/webp";
     if (new DataView(b.buffer).getUint32(4, true) + 8 !== blob.size)
       throw Error("불완전한 WebP");
+  } else if (["GIF87a","GIF89a"].includes(String.fromCharCode(...b.slice(0,6)))) {
+    mime="image/gif";
+  } else if (String.fromCharCode(...b.slice(4,8))==="ftyp") {
+    return {blob:blob.slice(0,blob.size,"video/mp4"),mime:"video/mp4",codecVerified:false};
+  } else if ([26,69,223,163].every((v,i)=>b[i]===v)) {
+    return {blob:blob.slice(0,blob.size,"video/webm"),mime:"video/webm",codecVerified:false};
   } else throw Error("지원 형식 아님: 복원된 PNG/JPEG/WebP가 필요합니다");
   if (width !== undefined && (!width || !height || width * height > 64e6))
     throw Error("이미지 해상도 제한");

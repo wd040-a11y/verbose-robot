@@ -1,4 +1,6 @@
 import "./style.css";
+import {imageViewer,movieViewer} from "./ui/media.js";
+import { StoryCursor } from "./exploration/player.js";
 import { openStory, inspectPackage } from "./ui/story.js";
 import { Package, importZip, library, get, put } from "./storage.js";
 import { Interpreter, initial, clone, selectPage, pageStatus } from "./core.js";
@@ -181,6 +183,8 @@ button(
   () => showStatic(),
   playbackOptions,
 );
+button("CG 전체 보기",()=>c.session && imageViewer(c.pkg,c.session.history.runner.state.pictures),playbackOptions);
+button("현재 동영상 열기",()=>c.session?.history.runner.state.storyMovie && movieViewer(c.pkg,c.session.history.runner.state.storyMovie),playbackOptions);
 const diagnostics = el("div", null, playbackOptions);
 const renderer = new SceneRenderer(scene, face),
   textPlayer = new Dialogue(dialogue, effectNotice);
@@ -413,10 +417,7 @@ async function renderEvents() {
       c.currentMap.name?.toLowerCase().includes(search),
   );
   if (eventFilter.value === "content")
-    rows.sort(
-      (a, b) =>
-        Number(c.infos.get(b.id)?.content) - Number(c.infos.get(a.id)?.content),
-    );
+    rows = rows.filter((e) => c.infos.get(e.id)?.content);
   if (eventFilter.value === "system")
     rows = rows.filter((e) => !c.infos.get(e.id)?.content);
   paginate(
@@ -443,7 +444,7 @@ async function renderEvents() {
         row,
       );
       button("감상하기", () => watch(e), row, "primary");
-      button("상황 선택", () => conditionDialog(e), row, "subtle");
+      button("상황 선택", () => { if(mode!=="story") return conditionDialog(e); const d=modal("감상할 상황 선택");e.pages.forEach((p,i)=>button(`페이지 ${i+1}`,async()=>{d.close();await start(e,i,clone(c.world),true,["페이지 직접 감상 · 도달 가능성 미확정"]);},d)); }, row, "subtle");
       details(row, "고급 · 원본 식별 정보", {
         map: c.currentMap.map_id,
         event: e.id,
@@ -465,7 +466,10 @@ async function renderEvents() {
   );
 }
 async function watch(e) {
-  if (mode === "story") return openStory(e, common, c.pkg);
+  if (mode === "story") {
+ const index=e.pages.findIndex((p)=>p.commands.some(x=>[101,401,105,405,102,231,261,117].includes(x.raw.code)));
+ return start(e, Math.max(0,index),clone(c.world),true,["정적 감상: 세계 상태를 변경하지 않습니다. 조건은 경로를 직접 선택합니다."]);
+ }
   const ctx = { map: c.currentMap.map_id, event: e.source.event_id },
     index = selectPage(e, c.world, ctx);
   if (index < 0) return conditionDialog(e);
@@ -546,7 +550,7 @@ async function start(e, index, state, temporary, warnings) {
     ch.characterName = image.characterName || "";
     ch.characterIndex = image.characterIndex || 0;
   }
-  const runner = new Interpreter({
+  const runner = new (mode === "story" ? StoryCursor : Interpreter)({
     page: e.pages[index],
     state,
     context: ctx,
@@ -560,6 +564,7 @@ async function start(e, index, state, temporary, warnings) {
     page: e.pages[index],
     baseline: clone(c.world),
     temporary,
+    staticStory: mode === "story",
     warnings,
     history: new History(runner),
   };
@@ -695,7 +700,7 @@ async function rollback() {
   await renderEvents();
 }
 function commitSession() {
-  if (!c.session?.temporary) return;
+  if (!c.session?.temporary || c.session.staticStory) return;
   const d = modal("감상 결과 반영 확인");
   details(
     d,
@@ -722,6 +727,8 @@ function commitSession() {
 }
 function showStatic() {
   if (!c.session) return;
+  return openStory(c.session.event,common,c.pkg);
+/*
   const d = modal("전체 이벤트 원문 — 미실행 분기 포함");
   el(
     "p",
@@ -733,6 +740,7 @@ function showStatic() {
     el("small", t.id, d);
   }
 }
+*/}
 async function historyPanel() {
   const parent = screens["기록"];
   parent.replaceChildren();
@@ -923,6 +931,7 @@ async function openTab(name) {
 function setMobile(v) {
   mobileView = v;
   layout.dataset.mobile = v;
+  if(matchMedia("(max-width: 850px)").matches) layout.scrollIntoView({block:"start"});
 }
 gameFile.onchange = async () => {
   try {

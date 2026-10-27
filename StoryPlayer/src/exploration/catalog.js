@@ -27,7 +27,7 @@ export async function classify(
       result.choices = true;
       result.texts.push({ id: cmd.id, choices: p[0], indent: cmd.raw.indent });
     }
-    if (code === 231) result.pictures = true;
+    if ([231,261].includes(code)) result.pictures = true;
     if (code === 201) result.transfer = true;
     if ([121, 122, 123, 125, 126, 127, 128, 129, 205, 211, 322].includes(code))
       result.state = true;

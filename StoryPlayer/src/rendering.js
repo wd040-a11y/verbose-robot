@@ -33,7 +33,7 @@ export class SceneRenderer {
     this.resize();
   }
   resize() {
-    this.layer.style.transform = `scale(${this.scene.clientWidth / this.width})`;
+    this.layer.style.transform = `scale(${Math.min(this.scene.clientWidth / this.width, this.scene.clientHeight / this.height)})`;
   }
   async pictures(pkg, s) {
     const generation = ++this.generation;
