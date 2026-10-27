@@ -108,7 +108,9 @@ export class Package {
   }
 }
 export async function importZip(file, progress, existing) {
-  const zip = new ZipReader(new BlobReader(file));
+  // Sequential native Streams avoid worker-pool stalls observed in WebKit.
+  // CRC checks and per-entry/total size limits remain enabled.
+  const zip = new ZipReader(new BlobReader(file), { useWebWorkers: false });
   try {
     const entries = await zip.getEntries();
     if (entries.length > 30000) throw Error("파일 개수 한도");

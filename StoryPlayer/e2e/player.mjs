@@ -21,6 +21,13 @@ if (process.env.PLAYER_EXE) {
 }
 page.setDefaultTimeout(30000);
 const errors = [];
+const diagnostics = [];
+page.on("console", (m) => {
+  if (m.type() === "error") diagnostics.push(m.text());
+});
+page.on("requestfailed", (r) =>
+  diagnostics.push(r.url() + ": " + r.failure()?.errorText),
+);
 page.on("pageerror", (e) => errors.push(e.message));
 try {
   await page
@@ -179,7 +186,11 @@ try {
   await fs
     .writeFile(
       `reports/${mode}-failure.txt`,
-      String(e) + "\n" + (await page.locator("body").innerText()),
+      String(e) +
+        "\n" +
+        JSON.stringify({ errors, diagnostics }) +
+        "\n" +
+        (await page.locator("body").innerText()),
     )
     .catch(() => {});
   throw e;
