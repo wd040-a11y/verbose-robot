@@ -7,12 +7,15 @@ if(mode==='electron'){app=await _electron.launch({executablePath:path.resolve(pr
 else{browser=await (mode==='webkit'?webkit:chromium).launch({headless:true});page=await browser.newPage();await page.goto(process.env.PLAYER_URL||'http://127.0.0.1:5173');}
 page.setDefaultTimeout(30000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
 async function advanceToGreeting(){
- for(let i=0;i<4;i++){
-  if(await page.getByText('환영합니다.',{exact:true}).isVisible())return;
-  await page.getByRole('button',{name:'다음',exact:true}).click();
+ const next=page.getByRole('button',{name:'다음',exact:true});
+ for(let i=0;i<3;i++){
+  await expect(next).not.toHaveAttribute('aria-busy','true');
+  if(await page.getByText(/그림 표시 · 다음으로/).isVisible())await next.click();
+  else break;
  }
  await expect(page.getByText('환영합니다.',{exact:true})).toBeVisible();
 }
+
 try{
  await page.locator('input[type=file]').first().setInputFiles(path.resolve('fixtures/sample.zip'));
  await page.getByRole('button',{name:/시작 마을/}).click();
