@@ -140,3 +140,4 @@ test("break targets active outer loop after an inner loop finished", async () =>
   assert.equal((await r.advance()).type, "done");
   assert.equal(r.state.switches[7], true);
 });
+

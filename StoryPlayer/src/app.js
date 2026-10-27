@@ -1,606 +1,992 @@
-import { migrateState, seedMap } from "./state.js";
-import { SceneRenderer, loadImage } from "./rendering.js";
 import "./style.css";
+import { openStory } from "./ui/story.js";
 import { Package, importZip, library, get, put } from "./storage.js";
-import { initial, clone, selectPage, pageStatus, Interpreter } from "./core.js";
+import { Interpreter, initial, clone, selectPage, pageStatus } from "./core.js";
+import { migrateState, seedMap } from "./state.js";
+import { History } from "./core/history.js";
+import { changes, describeChanges } from "./core/changes.js";
+import { SceneRenderer } from "./rendering.js";
+import { Dialogue } from "./presentation/dialogue.js";
+import { classify, friendlyName, staticText } from "./exploration/catalog.js";
+import { pagePlan } from "./exploration/conditions.js";
+import { actorDatabase, database } from "./character/status.js";
+import { buildSources } from "./enrichment/sources.js";
+import { displayText, semanticLabel } from "./enrichment/manager.js";
+import { previewPreset } from "./core/saves.js";
+import {
+  el,
+  button,
+  input,
+  select,
+  details,
+  modal,
+  paginate,
+  download,
+} from "./ui/dom.js";
+import {
+  statePanel,
+  actorsPanel,
+  resourcesPanel,
+  analysisPanel,
+  helpPanel,
+} from "./ui/panels.js";
 const root = document.querySelector("#app");
-let pkg,
-  state,
-  maps = [],
-  events = [],
-  currentMap,
-  runner,
-  temporary = false,
-  baseline,
-  urls = [],
-  lastMessage = null,
-  currentEventName = "",
-  registry;
-function node(tag, text, parent = root) {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  parent.append(e);
-  return e;
-}
-function button(text, fn, parent = root) {
-  const b = node("button", text, parent);
-  b.onclick = async () => {
-    try {
-      await fn();
-    } catch (e) {
-      status.textContent = e.message;
-    }
-  };
-  return b;
-}
-node("h1", "RPG Story Player 0.2.0");
-node("p", "로컬 이벤트 재생 · 게임 데이터는 서버로 전송하지 않습니다.");
-const top = node("section"),
-  status = node("p", "추출 ZIP을 불러오세요.");
-const input = node("input", undefined, top);
-input.type = "file";
-input.accept = ".zip,application/zip,application/x-zip-compressed";
-input.setAttribute("aria-label", "추출 패키지 ZIP");
-const select = node("select", undefined, top);
-select.setAttribute("aria-label", "게임 선택");
-select.onchange = () =>
-  load(select.value).catch((e) => (status.textContent = e.message));
-button("리소스 ZIP 추가", () => resource.click(), top);
-const resource = node("input", undefined, top);
-resource.type = "file";
-resource.accept = ".zip,application/zip,application/x-zip-compressed";
-resource.hidden = true;
-const nav = node("nav");
-nav.setAttribute("aria-label", "화면 이동");
-const grid = node("main"),
-  left = node("section", undefined, grid),
-  middle = node("section", undefined, grid),
-  right = node("section", undefined, grid);
-node("h2", "장소", left);
-const search = node("input", undefined, left);
-search.placeholder = "맵 이름 / ID";
-const mapList = node("div", undefined, left);
-node("h2", "이벤트", middle);
-const eventList = node("div", undefined, middle);
-node("h2", "재생", right);
-const eventTitle = node("h3", "이벤트를 선택하세요", right);
-right.className = "player-panel";
-const scene = node("div", undefined, right),
-  dialog = node("div", "", right),
-  controls = node("div", undefined, right);
-scene.setAttribute("aria-label", "CG 표시 영역");
-const face = node("div", undefined, right);
-face.className = "face";
-right.insertBefore(face, dialog);
-dialog.className = "dialogue";
-controls.className = "play-controls";
-const renderer = new SceneRenderer(scene, face);
-const tools = node("section");
-node("h2", "상태와 기록", tools);
-const gallery = node("section");
-node("h2", "이미지 연결 / 미리보기", gallery);
-const resourceSummary = node(
+const c = {
+  pkg: null,
+  world: null,
+  game: null,
+  maps: [],
+  events: [],
+  infos: new Map(),
+  enrichment: { items: {}, conflicts: [], failed: 0 },
+  edits: [],
+  index: null,
+  session: null,
+  currentMap: null,
+  db: {},
+  cancelIndex: false,
+  archives: [],
+  referenceIndex: [],
+};
+let language = "original",
+  activeTab = "감상",
+  mobileView = "장소",
+  mode = "story",
+  eventPage = 0,
+  auto = false,
+  autoTimer,
+  renderEpoch = 0;
+const header = el("header", null, root),
+  brand = el("div", null, header);
+el("span", "RPG STORY PLAYER", brand, "eyebrow");
+el("h1", "당신의 속도로, 이야기 속으로", brand);
+const top = el("div", null, header, "top-controls"),
+  gameFile = input(top, "게임 추출 ZIP", "file");
+gameFile.accept = ".zip,application/zip";
+const games = select(top, "등록된 게임", []);
+const modeSelect = select(top, "감상 모드", [
+    ["story", "스토리 감상 (기본)"],
+    ["free", "원작 진행 재현 · 임시 상태 (고급)"],
+    ["progress", "원작 진행 재현 · 저장 반영 (고급)"],
+  ]),
+  langSelect = select(top, "표시 언어", [
+    ["original", "원문"],
+    ["ko", "한국어"],
+    ["both", "원문 + 한국어"],
+  ]);
+const status = el(
   "p",
-  "리소스 ZIP을 추가하면 연결 결과를 확인할 수 있습니다.",
-  gallery,
+  "게임 추출 ZIP을 불러오세요. 이미지 없이도 시작할 수 있습니다.",
+  root,
+  "status",
 );
-const resourceDetails = node("details", undefined, gallery);
-node("summary", "파일별 연결 결과", resourceDetails);
-const resourceReport = node("pre", "", resourceDetails);
-const imageSearch = node("input", undefined, gallery);
-imageSearch.placeholder = "이미지 이름 / 경로 검색";
-const imageList = node("div", undefined, gallery),
-  imagePreview = node("div", undefined, gallery);
-imagePreview.className = "image-preview";
-imageSearch.oninput = () => renderGallery();
-for (const [label, target] of [
-  ["장소", left],
-  ["이벤트", middle],
-  ["재생", right],
-  ["이미지", gallery],
-  ["상태", tools],
-])
-  button(
-    label,
-    () => target.scrollIntoView({ behavior: "smooth", block: "start" }),
-    nav,
-  );
-const actorPanel = node("details", undefined, tools);
-node("summary", "변경된 액터 그래픽", actorPanel);
-const actorList = node("div", undefined, actorPanel);
-
-const type = node("select", undefined, tools);
-for (const v of ["switches", "variables", "self", "items", "party"]) {
-  const o = node(
-    "option",
-    {
-      switches: "스위치",
-      variables: "변수",
-      self: "셀프 스위치",
-      items: "아이템",
-      party: "파티",
-    }[v],
-    type,
-  );
-  o.value = v;
+status.setAttribute("role", "status");
+const modeHelp = el(
+  "p",
+  "스토리 감상: 명령 실행 없이 원본 대사와 분기를 탐색합니다.",
+  root,
+  "mode-help",
+);
+const nav = el("nav", null, root, "main-nav"),
+  screens = {};
+for (const name of [
+  "감상",
+  "인물",
+  "세계 상태",
+  "기록",
+  "리소스",
+  "AI 분석",
+  "도움말",
+]) {
+  button(name, () => openTab(name), nav);
+  screens[name] = el("section", null, root, "screen");
+  screens[name].hidden = name !== "감상";
 }
-const stateSearch = node("input", undefined, tools);
-stateSearch.placeholder = "ID 또는 이름 검색";
-const editor = node("div", undefined, tools);
-const snapshotName = node("input", undefined, tools);
-snapshotName.placeholder = "스냅샷 이름";
-const snapshots = node("select", undefined, tools);
+const explore = screens["감상"],
+  filters = el("div", null, explore, "explore-filters");
+const timeline = select(filters, "시점과 엔딩", [
+  ["all", "모든 시점 · 분석 전"],
+]);
+const globalSearch = input(filters, "장소 / 인물 / 장면 검색");
+const mobileNav = el("div", null, explore, "mobile-nav");
+for (const v of ["장소", "장면", "재생"])
+  button(v, () => setMobile(v), mobileNav);
+const layout = el("div", null, explore, "explorer"),
+  locations = el("section", null, layout, "locations"),
+  scenes = el("section", null, layout, "scenes"),
+  viewer = el("section", null, layout, "viewer");
+el("h2", "장소", locations);
+const mapList = el("div", null, locations);
+el("h2", "인물과 장면", scenes);
+const eventFilter = select(scenes, "장면 종류", [
+  ["content", "대화 · 선택지 · CG 우선"],
+  ["all", "모든 장면"],
+  ["system", "시스템 / 자동 처리"],
+]);
+const eventList = el("div", null, scenes);
+const title = el("h2", "보고 싶은 장면을 선택하세요", viewer),
+  sessionBadge = el("small", "", viewer),
+  scene = el("div", null, viewer, "scene");
+scene.setAttribute("aria-label", "장면 CG");
+scene.hidden = true;
+const dialogueBox = el("div", null, viewer, "dialogue-viewport"),
+  face = el("div", null, dialogueBox, "face"),
+  dialogue = el(
+    "div",
+    "장소와 장면을 선택하고 감상하기를 누르세요.",
+    dialogueBox,
+    "dialogue",
+  );
+dialogue.setAttribute("aria-live", "polite");
+const effectNotice = el("small", "", viewer, "effect-notice"),
+  choices = el("div", null, viewer, "choices");
+const toolbar = el("div", null, viewer, "playbar");
+const previous = button(
+    "이전",
+    () => seek((c.session?.history.cursor || 0) - 1),
+    toolbar,
+  ),
+  next = button("다음", () => advance(), toolbar),
+  logButton = button("기록", () => openTab("기록"), toolbar),
+  autoButton = button("자동", () => toggleAuto(), toolbar);
+const playbackOptions = el("details", null, viewer, "playback-options");
+el("summary", "감상 설정 / 실행 정보", playbackOptions);
+const size = select(playbackOptions, "글자 크기", [
+  ["22", "보통 글자"],
+  ["28", "큰 글자"],
+  ["34", "매우 큰 글자"],
+]);
+const speed = select(playbackOptions, "출력 속도", [
+  ["normal", "순차 출력"],
+  ["instant", "즉시 출력"],
+]);
 button(
-  "스냅샷 저장",
-  async () => {
-    if (!pkg) return;
-    const list = (await get("meta", "snapshots:" + pkg.id)) || [];
-    list.push({
-      id: crypto.randomUUID(),
-      name: snapshotName.value || new Date().toLocaleString(),
-      state: clone(state),
-    });
-    await put("meta", "snapshots:" + pkg.id, list);
-    await refreshSnapshots();
-  },
-  tools,
-);
-button(
-  "스냅샷 복원",
-  async () => {
-    const list = (await get("meta", "snapshots:" + pkg.id)) || [];
-    const v = list.find((x) => x.id === snapshots.value);
-    if (v) {
-      runner = null;
-      temporary = false;
-      state = migrateState(clone(v.state));
-      await save();
-      await showEvents();
-      renderState();
-      await resetPresentation();
-      dialog.textContent = "세계 상태 복원 완료";
-    }
-  },
-  tools,
-);
-button(
-  "실행 전으로 되돌리기",
-  async () => {
-    if (baseline) {
-      state = clone(baseline);
-      runner = null;
-      temporary = false;
-      await save();
-      renderState();
-      await showEvents();
-      await resetPresentation();
-      dialog.textContent = "실행 전 상태를 복원했습니다.";
-    }
-  },
-  tools,
-);
-button(
-  "현재 실행 중단",
-  async () => {
-    runner = null;
-    controls.replaceChildren();
-    dialog.textContent =
-      "중단됨. 이미 적용한 상태는 되돌리기로 복원할 수 있습니다.";
-  },
-  tools,
-);
-button(
-  "실행 기록 내보내기",
+  "일시 정지",
   () => {
-    if (!runner) return;
-    const u = URL.createObjectURL(
-      new Blob([JSON.stringify(runner.log, null, 2)], {
-        type: "application/json",
-      }),
-    );
-    const a = node("a", "기록 다운로드", tools);
-    a.href = u;
-    a.download = "event-log.json";
-    a.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(u);
-      a.remove();
-    }, 1000);
+    stopAuto();
+    textPlayer.stop();
   },
-  tools,
+  playbackOptions,
 );
-async function refreshLibrary() {
-  const list = await library();
-  select.replaceChildren();
-  for (const p of list) {
-    const o = node("option", p.title, select);
-    o.value = p.id;
-  }
-  return list;
+button(
+  "대사 영역 확대",
+  () => viewer.classList.toggle("expanded"),
+  playbackOptions,
+);
+button("실행 전 상태 복원", () => rollback(), playbackOptions);
+button("감상 결과를 기본 저장에 반영", () => commitSession(), playbackOptions);
+button(
+  "전체 이벤트 원문 (미실행 분기 포함)",
+  () => showStatic(),
+  playbackOptions,
+);
+const diagnostics = el("div", null, playbackOptions);
+const renderer = new SceneRenderer(scene, face),
+  textPlayer = new Dialogue(dialogue, effectNotice);
+previous.disabled = next.disabled = true;
+c.status = (t) => (status.textContent = t);
+c.error = (t) => {
+  status.textContent = "확인 필요: " + t;
+  status.classList.add("error");
+};
+window.addEventListener("player-error", (e) => c.error(e.detail));
+c.text = (id, raw) => displayText(c.enrichment, id, raw, language);
+c.refreshNames = () => {
+  renderMaps();
+  renderEvents();
+  renderTimeline();
+};
+c.saveEnrichment = async () => {
+  await put("meta", "enrichment:" + c.pkg.id, c.enrichment);
+};
+c.ensureIndex = async () => {
+  if (c.index) return c.index;
+  c.cancelIndex = false;
+  c.status("AI 분석 자료 준비 중 — 이미지는 포함하지 않습니다.");
+  c.index = await buildSources(c.pkg, c.game, c.maps, c.pkg.commons, c.db, {
+    progress: (n, t) => c.status(`분석 자료 준비 ${n}/${t} 맵`),
+    cancelled: () => c.cancelIndex,
+  });
+  c.referenceIndex = Object.values(c.index)
+    .filter((x) => x.kind === "command" && [111, 121, 122].includes(x.code))
+    .flatMap((x) =>
+      x.code === 111 && [0, 1].includes(x.parameters[0])
+        ? [
+            {
+              kind: x.parameters[0] === 0 ? "switches" : "variables",
+              id: x.parameters[1],
+            },
+          ]
+        : [121, 122].includes(x.code)
+          ? Array.from(
+              {
+                length: Math.min(10001, x.parameters[1] - x.parameters[0] + 1),
+              },
+              (_, i) => ({
+                kind: x.code === 121 ? "switches" : "variables",
+                id: x.parameters[0] + i,
+              }),
+            )
+          : [],
+    );
+  c.status("분석 자료 준비 완료");
+  return c.index;
+};
+c.editWorld = async (next, reason) => {
+  stopAuto();
+  await archiveSession();
+  const patch = changes(c.world, next);
+  c.edits.push({ reason, at: new Date().toISOString(), patch });
+  c.edits = c.edits.slice(-100);
+  c.world = migrateState(next);
+  await saveWorld();
+  await put("meta", "edits:" + c.pkg.id, c.edits);
+  c.session = null;
+  await clearPlayer();
+  await renderEvents();
+};
+c.openEvent = async (id) => {
+  await c.ensureIndex();
+  const e = c.index[id];
+  if (!e || e.kind !== "event") throw Error("장면 참조를 찾을 수 없습니다.");
+  await chooseMap(c.maps.find((m) => m.map_id === e.map));
+  openTab("감상");
+  const event = c.events.find((x) => x.id === id);
+  if (event) await watch(event);
+};
+c.renderSession = renderSession;
+function stopAuto() {
+  auto = false;
+  clearTimeout(autoTimer);
+  autoButton.textContent = "자동";
 }
-async function save() {
-  if (pkg && !temporary) await put("meta", "state:" + pkg.id, state);
+function toggleAuto() {
+  auto = !auto;
+  autoButton.textContent = auto ? "자동 중지" : "자동";
+  if (auto) scheduleAuto();
+  else clearTimeout(autoTimer);
 }
-async function refreshSnapshots() {
-  snapshots.replaceChildren();
-  for (const s of (await get("meta", "snapshots:" + pkg.id)) || []) {
-    const o = node("option", s.name, snapshots);
-    o.value = s.id;
-  }
+function scheduleAuto() {
+  clearTimeout(autoTimer);
+  if (!auto) return;
+  autoTimer = setTimeout(async () => {
+    const w = c.session?.history.current?.display;
+    if (!auto || !w) return;
+    if (w.type === "text" && !textPlayer.running && !textPlayer.paused)
+      await advance();
+    if (auto && c.session?.history.current?.display.type === "text")
+      scheduleAuto();
+  }, 1200);
+}
+async function saveWorld() {
+  if (c.pkg) await put("meta", "state:" + c.pkg.id, c.world);
+}
+async function archiveSession() {
+  if (!c.session) return;
+  const h = c.session.history;
+  if (!h.points.length) return;
+  const item = {
+    id: c.session.id,
+    name: title.textContent,
+    temporary: c.session.temporary,
+    ...h.archive(),
+  };
+  const at = c.archives.findIndex((a) => a.id === item.id);
+  if (at >= 0) c.archives[at] = item;
+  else c.archives.push(item);
+  c.archives = c.archives.slice(-12);
+  await put("meta", "history:" + c.pkg.id, c.archives);
+}
+async function refreshGames() {
+  const rows = await library();
+  games.replaceChildren();
+  for (const r of rows) el("option", r.title, games).value = r.id;
+  return rows;
 }
 async function load(id) {
+  stopAuto();
+  textPlayer.stop();
   const m = await get("meta", id);
-  pkg = new Package(m);
-  runner = null;
-  temporary = false;
-  currentMap = null;
-  baseline = null;
+  c.pkg = new Package(m);
+  c.session = null;
+  c.index = null;
+  c.infos.clear();
+  c.events = [];
+  c.currentMap = null;
+  c.referenceIndex = [];
+  c.maps = await c.pkg.json("normalized/maps.json");
+  c.game = await c.pkg.json("normalized/game.json");
+  c.world = migrateState(
+    (await get("meta", "state:" + id)) || initial(c.game.system),
+  );
+  c.enrichment = (await get("meta", "enrichment:" + id)) || {
+    items: {},
+    conflicts: [],
+    failed: 0,
+  };
+  c.edits = (await get("meta", "edits:" + id)) || [];
+  c.archives = (await get("meta", "history:" + id)) || [];
+  c.registry = await c.pkg.plugins();
+  c.pkg.assets = await c.pkg.json("normalized/assets.json");
+  c.pkg.commons = await c.pkg.json("normalized/common_events.json");
+  c.db = await actorDatabase(c.pkg);
+  c.db.Items = await database(c.pkg, "Items");
+  const s = c.game.system.advanced || {};
+  renderer.setSize(
+    s.screenWidth || (m.manifest.engine === "VXACE" ? 544 : 816),
+    s.screenHeight || (m.manifest.engine === "VXACE" ? 416 : 624),
+  );
+  games.value = id;
+  await put("meta", "last-game", id);
+  await clearPlayer();
+  renderMaps();
+  renderTimeline();
   eventList.replaceChildren();
-  dialog.textContent = "맵과 이벤트를 선택하세요.";
-  controls.replaceChildren();
+  c.status(`${m.title} · 맵 ${c.maps.length}개 · 자유롭게 장소를 선택하세요.`);
+  openTab("감상");
+}
+async function clearPlayer() {
+  scene.hidden = true;
   renderer.layer.replaceChildren();
   face.replaceChildren();
-  lastMessage = null;
-  maps = await pkg.json("normalized/maps.json");
-  const game = await pkg.json("normalized/game.json");
-  state = migrateState(
-    (await get("meta", "state:" + id)) || initial(game.system),
-  );
-  registry = await pkg.plugins();
-  const screen = game.system.advanced || {};
-  renderer.setSize(
-    screen.screenWidth || (pkg.manifest.engine === "VXACE" ? 544 : 816),
-    screen.screenHeight || (pkg.manifest.engine === "VXACE" ? 416 : 624),
-  );
-  pkg.assets = await pkg.json("normalized/assets.json");
-  pkg.commons = await pkg.json("normalized/common_events.json");
-  renderMaps();
-  renderState();
-  await renderGallery();
-  await showResourceReport();
-  await refreshSnapshots();
-  status.textContent = `${m.title} · ${m.manifest.engine} · 맵 ${maps.length} · 이벤트 ${m.events} · 이미지는 선택 사항`;
+  choices.replaceChildren();
+  diagnostics.replaceChildren();
+  previous.disabled = next.disabled = true;
+  title.textContent = "보고 싶은 장면을 선택하세요";
+  dialogue.textContent = "장소와 장면을 선택하고 감상하기를 누르세요.";
+  sessionBadge.textContent = "";
 }
 function renderMaps() {
   mapList.replaceChildren();
-  for (const m of maps.filter((x) =>
-    (x.name + " " + x.map_id)
+  for (const m of c.maps.filter((m) =>
+    `${m.name} ${c.text("map:" + m.map_id, m.name)}`
       .toLowerCase()
-      .includes(search.value.toLowerCase()),
-  ))
-    button(
-      `${m.map_id} · ${m.name || "(이름 없음)"}`,
-      async () => {
-        currentMap = m;
-        await showEvents();
-      },
+      .includes(globalSearch.value.toLowerCase()),
+  )) {
+    const b = button(
+      c.text("map:" + m.map_id, m.name) || "이름 없는 장소",
+      () => chooseMap(m),
       mapList,
     );
+    b.classList.toggle("selected", m === c.currentMap);
+    b.dataset.mapId = m.map_id;
+  }
+  if (!c.maps.length) el("p", "게임을 먼저 선택하세요.", mapList);
 }
-search.oninput = renderMaps;
-async function showEvents() {
+async function common(id) {
+  const row = c.pkg.commons.find((x) => x.id === `common_event:${id}`);
+  return row ? (await c.pkg.json(row.file)).page : null;
+}
+async function chooseMap(m) {
+  if (!m) return;
+  c.currentMap = m;
+  c.events = (await c.pkg.json(m.file)).events;
+  eventPage = 0;
+  c.infos.clear();
+  for (const e of c.events) {
+    const entries = await Promise.all(e.pages.map((p) => classify(p, common)));
+    const info = {
+      content: entries.some((x) => x.content),
+      category:
+        entries.find((x) => x.content)?.category ||
+        entries[0]?.category ||
+        "미분류",
+      texts: entries.flatMap((x) => x.texts),
+    };
+    c.infos.set(e.id, info);
+  }
+  renderMaps();
+  await renderEvents();
+  setMobile("장면");
+}
+async function renderEvents() {
   eventList.replaceChildren();
-  if (!currentMap) return;
-  const shard = await pkg.json(currentMap.file);
-  events = shard.events;
-  for (const e of events) {
-    const ctx = { map: currentMap.map_id, event: e.source.event_id };
-    const active = selectPage(e, state, ctx);
-    const row = node("article", undefined, eventList);
-    node(
-      "strong",
-      `${e.source.event_id} · ${e.raw_metadata.name || e.id}`,
-      row,
+  if (!c.currentMap) return;
+  const search = globalSearch.value.toLowerCase();
+  let rows = c.events.filter(
+    (e) =>
+      !search ||
+      JSON.stringify([e.raw_metadata.name, c.infos.get(e.id)?.texts])
+        .toLowerCase()
+        .includes(search) ||
+      c.currentMap.name?.toLowerCase().includes(search),
+  );
+  if (eventFilter.value === "content")
+    rows.sort(
+      (a, b) =>
+        Number(c.infos.get(b.id)?.content) - Number(c.infos.get(a.id)?.content),
     );
-    node(
-      "small",
-      active < 0 ? "현재 조건 불충족" : `활성 페이지 ${active + 1}`,
-      row,
-    );
-    if (active >= 0)
-      button("일반 실행", () => start(e, active, false, ctx), row);
-    const pages = node("select", undefined, row);
-    e.pages.forEach((p, i) => {
-      const o = node(
-        "option",
-        `페이지 ${i + 1} — ${pageStatus(p, state, ctx).join(", ") || "조건 충족"}`,
-        pages,
+  if (eventFilter.value === "system")
+    rows = rows.filter((e) => !c.infos.get(e.id)?.content);
+  paginate(
+    eventList,
+    rows,
+    eventPage,
+    (e, p) => {
+      const info = c.infos.get(e.id),
+        row = el("article", null, p, "event-card");
+      const name = friendlyName(
+        e,
+        info,
+        semanticLabel(c.enrichment, e.id) ||
+          (language !== "original"
+            ? c.enrichment.items?.["translation:" + e.id]?.value.text
+            : null),
       );
-      o.value = i;
+      el("strong", name, row);
+      const ctx = { map: c.currentMap.map_id, event: e.source.event_id },
+        active = selectPage(e, c.world, ctx);
+      el(
+        "small",
+        `${info.category} · ${active >= 0 ? "현재 조건에 맞는 장면 있음" : "조건 선택 필요"}${info.content ? "" : " · 대사 없는 처리일 수 있음"}`,
+        row,
+      );
+      button("감상하기", () => watch(e), row, "primary");
+      button("상황 선택", () => conditionDialog(e), row, "subtle");
+      details(row, "고급 · 원본 식별 정보", {
+        map: c.currentMap.map_id,
+        event: e.id,
+        name: e.raw_metadata.name,
+        pages: e.pages.map((p, i) => ({
+          page: i + 1,
+          id: p.id,
+          conditions: pageStatus(p, c.world, ctx),
+        })),
+      });
+    },
+    {
+      size: 20,
+      onPage: (n) => {
+        eventPage = n;
+        renderEvents();
+      },
+    },
+  );
+}
+async function watch(e) {
+  if (mode === "story") return openStory(e, common, c.pkg);
+  const ctx = { map: c.currentMap.map_id, event: e.source.event_id },
+    index = selectPage(e, c.world, ctx);
+  if (index < 0) return conditionDialog(e);
+  return start(e, index, clone(c.world), mode === "free", []);
+}
+function conditionDialog(e) {
+  const d = modal("어떤 상황으로 감상할까요?");
+  el(
+    "p",
+    "페이지 조건만 적용하며 내부 분기·공통 이벤트·스크립트 조건까지 해결한 것으로 보지 않습니다. 이 감상은 기본 저장을 바꾸지 않습니다.",
+    d,
+  );
+  const s = select(
+    d,
+    "장면 상황",
+    e.pages.map((p, i) => [
+      String(i),
+      `상황 ${i + 1} · ${pageStatus(p, c.world, { map: c.currentMap.map_id, event: e.source.event_id }).join(", ") || "페이지 조건 충족"}`,
+    ]),
+  );
+  const box = el("div", null, d);
+  const show = () => {
+    box.replaceChildren();
+    const plan = pagePlan(e, +s.value, c.world, {
+      map: c.currentMap.map_id,
+      event: e.source.event_id,
     });
-    button(
-      "임시 상태로 강제 감상",
-      () => start(e, +pages.value, true, ctx),
-      row,
+    details(
+      box,
+      "적용할 조건과 변경값",
+      describeChanges(plan.patch, c.game.system),
+    );
+    for (const w of plan.warnings) el("p", w, box);
+  };
+  s.onchange = show;
+  show();
+  button(
+    "조건을 적용하여 감상",
+    () => {
+      const p = pagePlan(e, +s.value, c.world, {
+        map: c.currentMap.map_id,
+        event: e.source.event_id,
+      });
+      d.close();
+      return start(e, +s.value, p.state, true, p.warnings);
+    },
+    d,
+    "primary",
+  );
+  button(
+    "특정 페이지 직접 감상",
+    () => {
+      d.close();
+      return start(e, +s.value, clone(c.world), true, [
+        "페이지 조건도 적용하지 않은 직접 감상입니다. 원작 진행 결과가 아닙니다.",
+      ]);
+    },
+    d,
+  );
+}
+async function start(e, index, state, temporary, warnings) {
+  stopAuto();
+  await archiveSession();
+  textPlayer.stop();
+  const ctx = { map: c.currentMap.map_id, event: e.source.event_id };
+  if (state.map !== ctx.map) {
+    temporary = true;
+    state.map = ctx.map;
+    state.player.positionKnown = false;
+    warnings.push(
+      "다른 장소로 즉시 접근한 자유 감상입니다. 플레이어 실제 좌표는 미확정입니다.",
     );
   }
-}
-async function start(e, i, force, ctx) {
-  baseline = clone(state);
-  currentEventName = `${e.raw_metadata.name || e.id} · 페이지 ${i + 1}`;
-  eventTitle.textContent = currentEventName;
-  temporary = force;
-  runner = new Interpreter({
-    page: e.pages[i],
-    state: seededState(e, i, ctx),
-    plugins: registry,
+  seedMap(state, { events: c.events }, ctx.map, selectPage);
+  const ch = state.characters[`${ctx.map}:${ctx.event}`],
+    image = e.pages[index].raw_metadata?.image;
+  if (ch && image) {
+    ch.characterName = image.characterName || "";
+    ch.characterIndex = image.characterIndex || 0;
+  }
+  const runner = new Interpreter({
+    page: e.pages[index],
+    state,
     context: ctx,
-    engine: pkg.manifest.engine,
-    common: async (id) => {
-      const c = pkg.commons.find((x) => x.id === `common_event:${id}`);
-      return c ? (await pkg.json(c.file)).page : null;
-    },
+    engine: c.pkg.manifest.engine,
+    common,
+    plugins: c.registry,
   });
-  await advance();
+  c.session = {
+    id: crypto.randomUUID(),
+    event: e,
+    page: e.pages[index],
+    baseline: clone(c.world),
+    temporary,
+    warnings,
+    history: new History(runner),
+  };
+  title.textContent = friendlyName(
+    e,
+    c.infos.get(e.id),
+    semanticLabel(c.enrichment, e.id) ||
+      (language !== "original"
+        ? c.enrichment.items?.["translation:" + e.id]?.value.text
+        : null),
+  );
+  await c.session.history.next();
+  setMobile("재생");
+  await renderSession();
+}
+function translatedMessage(w) {
+  if (!w.lineIds?.length) return w.text || "";
+  const originals = String(w.text).split("\n");
+  return w.lineIds.map((id, i) => c.text(id, originals[i] ?? "")).join("\n");
+}
+async function renderSession(instant = false) {
+  if (!c.session) return;
+  const epoch = ++renderEpoch,
+    session = c.session,
+    h = session.history,
+    w = h.current.display;
+  choices.replaceChildren();
+  textPlayer.stop();
+  sessionBadge.textContent = session.temporary
+    ? "자유 감상 · 기본 저장은 그대로"
+    : "진행 모드 · 변경 상태 자동 저장";
+  if (!session.temporary) {
+    c.world = clone(h.runner.state);
+    await saveWorld();
+  }
+  scene.hidden = Object.keys(h.runner.state.pictures).length === 0;
+  await renderer.pictures(c.pkg, h.runner.state);
+  await renderer.portrait(c.pkg, w.type === "text" ? w : null);
+  if (epoch !== renderEpoch) return;
+  previous.disabled = h.cursor <= 0;
+  next.disabled = !["text", "yield", "transfer"].includes(w.type);
+  diagnostics.replaceChildren();
+  details(diagnostics, "원본 실행 정보 / 주의 사항", {
+    command: w.command,
+    context: w.context,
+    warnings: session.warnings,
+    fidelity: h.runner.fidelity,
+    changes: describeChanges(
+      changes(session.baseline, h.runner.state),
+      c.game.system,
+    ),
+  });
+  if (w.type === "text") {
+    textPlayer
+      .render(
+        translatedMessage(w),
+        {
+          pkg: c.pkg,
+          state: h.runner.state,
+          actors: c.db.Actors,
+          currency: c.game.system.currencyUnit || "",
+          engine: c.pkg.manifest.engine,
+        },
+        {
+          instant: instant || speed.value === "instant",
+          fontSize: +size.value,
+        },
+      )
+      .catch((e) => c.error(e.message));
+  } else if (w.type === "choice") {
+    stopAuto();
+    dialogue.textContent = "어떻게 답할까요?";
+    w.choices.forEach((text, i) =>
+      button(
+        c.text(`${w.command}:choice:${i}`, text),
+        () => advance(i),
+        choices,
+        "choice",
+      ),
+    );
+    if (w.cancel.mode !== "disabled")
+      button("선택 취소", () => advance("cancel"), choices);
+  } else if (w.type === "blocked") {
+    stopAuto();
+    dialogue.textContent = `이 장면은 호환 처리가 필요합니다.\n${w.message}\n다른 장면은 계속 감상할 수 있습니다.`;
+    button("실행 전으로 복원", () => rollback(), choices);
+    details(diagnostics, "중단 명령", w);
+  } else if (w.type === "done") {
+    stopAuto();
+    const patch = changes(h.root, h.runner.state),
+      seen = h.points.some((p) => p.display.type === "text"),
+      pictures = Object.keys(h.runner.state.pictures).length > 0;
+    dialogue.textContent = `장면 감상 완료${session.temporary ? " · 원래 상태 유지" : ""}\n${!seen && !pictures ? "이번 실행 경로에는 대사 또는 표시 중인 CG가 없습니다.\n" : ""}${describeChanges(patch, c.game.system).slice(0, 12).join("\n") || "표시할 상태 변경이 없습니다."}`;
+    if (h.runner.fidelity.some((x) => x.kind === "simplification"))
+      el(
+        "small",
+        "이동/시간 간소화 포함 — 원작과 같은 결과인지 미검증",
+        choices,
+      );
+  } else {
+    dialogue.textContent =
+      w.type === "transfer"
+        ? "장소 이동을 기록했습니다. 계속 진행할 수 있습니다."
+        : "긴 이벤트를 나누어 처리 중입니다. 계속을 누르세요.";
+  }
+  await archiveSession();
+  if (auto) scheduleAuto();
 }
 async function advance(answer) {
-  if (!runner) return;
-  const active = runner;
-  let w = await active.advance(answer);
-  if (runner !== active) return;
-  controls.replaceChildren();
-  state = temporary ? state : clone(active.state);
-  await save();
-  renderState();
-  await pictures(active.state);
-  status.textContent = temporary
-    ? "임시 감상 — 기본 세계 상태 유지"
-    : "일반 진행 — 변경 상태 자동 저장";
-  dialog.className =
-    w.type === "blocked"
-      ? "dialogue blocked"
-      : w.type === "choice"
-        ? "dialogue choice-prompt"
-        : "dialogue";
-  lastMessage = w.type === "text" ? w : null;
-  await renderer.portrait(pkg, lastMessage);
-  if (w.type === "text") {
-    dialog.textContent =
-      (w.speaker ? w.speaker + "\n" : "") +
-      String(w.text).replace(/\\V\[(\d+)\]/gi, (_, id) =>
-        String(active.state.variables[id] ?? 0),
+  if (!c.session) return;
+  if (answer === undefined && textPlayer.running) {
+    textPlayer.continue();
+    return;
+  }
+  await c.session.history.next(answer);
+  await renderSession();
+}
+async function seek(index) {
+  stopAuto();
+  if (!c.session || index < 0) return;
+  c.session.history.seek(index);
+  await renderSession(true);
+}
+async function rollback() {
+  if (!c.session) return;
+  stopAuto();
+  await archiveSession();
+  c.world = clone(c.session.baseline);
+  await saveWorld();
+  c.session = null;
+  await clearPlayer();
+  dialogue.textContent = "실행 전 상태를 복원했습니다.";
+  await renderEvents();
+}
+function commitSession() {
+  if (!c.session?.temporary) return;
+  const d = modal("감상 결과 반영 확인");
+  details(
+    d,
+    "기본 저장에 반영할 차이",
+    describeChanges(
+      changes(c.world, c.session.history.runner.state),
+      c.game.system,
+    ),
+  );
+  el(
+    "p",
+    "조건 조작이나 미지원 중단이 포함된 결과는 정상적인 원작 도달 상태로 검증된 것이 아닙니다.",
+    d,
+  );
+  button(
+    "이 결과를 기본 저장에 반영",
+    async () => {
+      const next = clone(c.session.history.runner.state);
+      await c.editWorld(next, "자유 감상 결과 명시적 반영");
+      d.close();
+    },
+    d,
+  );
+}
+function showStatic() {
+  if (!c.session) return;
+  const d = modal("전체 이벤트 원문 — 미실행 분기 포함");
+  el(
+    "p",
+    "분기 깊이와 명령 위치를 보존한 열람 자료입니다. 실제 대화 기록이 아니며 연결된 공통 이벤트는 별도 원본을 확인해야 합니다.",
+    d,
+  );
+  for (const t of staticText(c.session.page)) {
+    el("p", `${"　".repeat(Math.min(t.indent, 12))}${t.text}`, d);
+    el("small", t.id, d);
+  }
+}
+async function historyPanel() {
+  const parent = screens["기록"];
+  parent.replaceChildren();
+  el("h2", "대화 기록", parent);
+  el(
+    "p",
+    "현재 감상의 기록을 선택하면 대사뿐 아니라 게임 상태·CG·선택지도 그 시점으로 복원합니다. 종료한 감상 기록은 열람용입니다.",
+    parent,
+  );
+  const search = input(parent, "기록 검색");
+  const list = el("div", null, parent);
+  const h = c.session?.history;
+  function render() {
+    list.replaceChildren();
+    if (h)
+      for (const [i, p] of h.points.slice(0, h.cursor + 1).entries()) {
+        if (p.selected)
+          el("p", "선택: " + p.selected.text, list, "choice-record");
+        if (
+          p.display.type === "text" &&
+          p.display.text.toLowerCase().includes(search.value.toLowerCase())
+        )
+          button(
+            p.display.text,
+            async () => {
+              await seek(i);
+              openTab("감상");
+              setMobile("재생");
+            },
+            list,
+            "log-entry",
+          );
+      }
+    if (h)
+      details(
+        list,
+        "다른 선택으로 갈라진 기록 (별도 경로)",
+        h.branches.map((b) => ({
+          from: b.at,
+          dialogue: b.points
+            .filter((p) => p.display.type === "text")
+            .map((p) => p.display.text),
+        })),
       );
-    button("다음", () => advance(), controls);
-  } else if (w.type === "choice") {
-    dialog.textContent = "선택하세요";
-    w.choices.forEach((c, i) => {
-      const b = button(c, () => advance(i), controls);
-      if (i === w.defaultIndex) b.focus();
-    });
-    if (w.cancel.mode !== "disabled")
-      button("취소 선택", () => advance("cancel"), controls);
-  } else if (w.type === "blocked") {
-    dialog.textContent = `이 이벤트 실행 중단\n${currentEventName}\n${w.message}\n다른 이벤트는 계속 선택할 수 있습니다.`;
-    const details = node("details", undefined, dialog);
-    node("summary", "명령 위치와 상태 변경 상세", details);
-    node(
-      "pre",
-      JSON.stringify(
-        {
-          command: w.command,
-          raw: w.raw,
-          context: w.context,
-          changes: w.changes,
-          before: baseline,
-          after: active.state,
-        },
-        null,
-        2,
-      ),
-      details,
+  }
+  search.oninput = render;
+  render();
+  button(
+    "대화 기록 텍스트 내보내기",
+    () => download("dialogue-log.txt", h?.text() || "", "text/plain"),
+    parent,
+  );
+  button(
+    "분기별 기록 JSON 내보내기",
+    () => download("dialogue-history.json", h?.archive() || c.archives),
+    parent,
+  );
+  for (const item of c.archives
+    .filter((x) => x.id !== c.session?.id)
+    .slice()
+    .reverse()) {
+    const d = details(
+      parent,
+      `${item.name} · ${item.temporary ? "자유 감상" : "진행"} · ${item.created}`,
+      item.points
+        .filter((p) => p.display.type === "text")
+        .map((p) => p.display.text)
+        .join("\n\n"),
     );
     button(
-      "실행 전 상태 복원",
-      async () => {
-        state = clone(baseline);
-        runner = null;
-        temporary = false;
-        await save();
-        renderState();
-        await showEvents();
-        await resetPresentation();
-        dialog.textContent = "실행 전 상태를 복원했습니다.";
+      "이 기록의 끝 상태와 비교",
+      () => {
+        const end = clone(item.root);
+        for (const point of item.points.slice(0, item.cursor + 1))
+          for (const change of point.patch) {
+            let o = end;
+            for (const key of change.path.slice(0, -1)) o = o[key] ??= {};
+            if (change.after === undefined) delete o[change.path.at(-1)];
+            else o[change.path.at(-1)] = clone(change.after);
+          }
+        const m = modal("저장 상태 비교");
+        details(
+          m,
+          "현재 기본 저장 → 이 감상 끝 상태",
+          describeChanges(changes(c.world, end), c.game.system),
+        );
       },
-      controls,
+      d,
     );
-  } else if (w.type === "done") {
-    dialog.textContent = active.fidelity.some(
-      (x) => x.kind === "simplification",
-    )
-      ? "이벤트 종료 — 이동/시간 간소화 포함 (원작 결과 동일성 미검증)"
-      : "이벤트 종료";
-    if (temporary)
-      button(
-        "감상 결과를 기본 세계에 반영",
-        async () => {
-          state = clone(active.state);
-          temporary = false;
-          await save();
-          renderState();
-          await showEvents();
-        },
-        controls,
-      );
-    await showEvents();
-  } else if (w.type === "transfer") {
-    dialog.textContent = `게임 위치가 맵 ${w.map}로 변경됐습니다. 자동/병렬 이벤트는 수동 실행 정책입니다.`;
-    button("계속", () => advance(), controls);
-  } else {
-    dialog.textContent = "연속 실행 한도에 도달해 일시 정지했습니다.";
-    button("계속", () => advance(), controls);
   }
 }
-function seededState(event, index, ctx) {
-  const copy = migrateState(clone(state));
-  seedMap(copy, { events }, ctx.map, selectPage);
-  // Force viewing changes page graphics only in the isolated execution copy.
-  const c = copy.characters[`${ctx.map}:${ctx.event}`];
-  const image = event.pages[index].raw_metadata?.image;
-  if (c && image && c.page !== event.pages[index].id)
-    Object.assign(c, {
-      direction: image.direction ?? 2,
-      directionKnown: true,
-      characterName: image.characterName || "",
-      characterIndex: image.characterIndex || 0,
-    });
-  return copy;
-}
-async function resetPresentation() {
-  controls.replaceChildren();
-  lastMessage = null;
-  await renderer.portrait(pkg, null);
-  await pictures(state);
-}
-async function pictures(s) {
-  await renderer.pictures(pkg, s);
-  renderActors(s);
-}
-function renderActors(s) {
-  actorList.replaceChildren();
-  for (const [id, g] of Object.entries(s.actorGraphics || {})) {
-    const row = node("div", undefined, actorList);
-    node(
-      "p",
-      `액터 ${id}: ${g.characterName} / 얼굴 ${g.faceName} [${g.faceIndex}]`,
-      row,
-    );
-    button("얼굴 미리보기", () => previewImage("img/faces/" + g.faceName), row);
+function renderTimeline() {
+  const previous = timeline.value;
+  timeline.replaceChildren();
+  el("option", "모든 시점", timeline).value = "all";
+  for (const [key, x] of Object.entries(c.enrichment.items || {}).filter(
+    ([, x]) => ["timeline", "ending"].includes(x.type),
+  )) {
+    el(
+      "option",
+      `${x.type === "ending" ? "엔딩 후보" : x.value.axis === "clock" ? "게임 시간" : "스토리 시점"} · ${x.value.text}${x.reviewed ? "" : " (미검토)"}`,
+      timeline,
+    ).value = key;
   }
+  timeline.value = previous || "all";
+  if (!timeline.value) timeline.value = "all";
 }
-async function showResourceReport() {
-  const r =
-    pkg.lastResourceImport || (await get("meta", "resource-report:" + pkg.id));
-  if (!r) {
-    resourceSummary.textContent =
-      "이미지는 선택 사항입니다. 연결된 이미지는 아래에서 미리 볼 수 있습니다.";
-    resourceReport.textContent = "";
+timeline.onchange = async () => {
+  if (timeline.value === "all") return;
+  await c.ensureIndex();
+  const x = c.enrichment.items[timeline.value],
+    d = modal(x.value.text);
+  el(
+    "p",
+    `${x.reviewed ? "사용자가 근거를 검토한 분석" : "미검토 후보"} · 원작 도달 가능성은 별도 검증이 필요합니다.`,
+    d,
+  );
+  details(d, "근거 / 미확정 사항", {
+    evidence: x.evidence,
+    uncertainties: x.uncertainties,
+    confidence: x.confidence,
+  });
+  const preset = c.enrichment.items["preset:" + x.target_id];
+  for (const id of x.value.event_ids || [])
+    button(
+      c.index[id]?.text || "연결 장면",
+      async () => {
+        const ref = c.index[id];
+        await chooseMap(c.maps.find((m) => m.map_id === ref.map));
+        const event = c.events.find((e) => e.id === id);
+        if (!event) throw Error("장면을 찾을 수 없습니다.");
+        if (preset) {
+          const plan = previewPreset(c.world, preset.value.changes),
+            p = modal("프리셋으로 자유 감상");
+          details(p, "변경값", describeChanges(plan.patch, c.game.system));
+          button(
+            "임시 상태에 적용하여 감상",
+            async () => {
+              p.close();
+              d.close();
+              openTab("감상");
+              const idx = selectPage(event, plan.state, {
+                map: ref.map,
+                event: ref.event_id,
+              });
+              if (idx < 0) return conditionDialog(event);
+              await start(event, idx, plan.state, true, [
+                "분석 프리셋으로 직접 접근한 감상입니다.",
+              ]);
+            },
+            p,
+          );
+        } else {
+          d.close();
+          openTab("감상");
+          const idx = selectPage(event, c.world, {
+            map: ref.map,
+            event: ref.event_id,
+          });
+          if (idx < 0) return conditionDialog(event);
+          await start(event, idx, clone(c.world), true, [
+            "시점/엔딩 후보에 직접 접근한 자유 감상입니다.",
+          ]);
+        }
+      },
+      d,
+    );
+};
+async function openTab(name) {
+  activeTab = name;
+  for (const [key, screen] of Object.entries(screens))
+    screen.hidden = key !== name;
+  if (name !== "감상") stopAuto();
+  if (name === "도움말") return helpPanel(screens[name]);
+  if (!c.pkg) {
+    if (name !== "감상") {
+      screens[name].replaceChildren();
+      el("p", "먼저 게임 추출 ZIP을 불러오세요.", screens[name]);
+    }
     return;
   }
-  resourceSummary.textContent = `이미지 연결 결과 · 검사 ${r.scanned}개 · 정상 연결 ${r.matched}개 · 참조 대상 없음 ${r.noReference || 0}개 · 형식 오류 ${r.invalid || 0}개 · 모호/중복 ${r.ambiguous || 0}개`;
-  resourceReport.textContent = (r.files || [])
-    .map((x) => `${x.status} | ${x.path} | ${x.reason || x.logical || ""}`)
-    .join("\n");
+  if (name === "인물") await actorsPanel(screens[name], c);
+  if (name === "세계 상태") statePanel(screens[name], c);
+  if (name === "기록") await historyPanel();
+  if (name === "리소스") await resourcesPanel(screens[name], c);
+  if (name === "AI 분석") await analysisPanel(screens[name], c);
 }
-let galleryRevision = 0;
-async function renderGallery() {
-  const rev = ++galleryRevision;
-  imageList.replaceChildren();
-  if (!pkg?.assets) return;
-  const found = pkg.assets.filter(
-    (a) =>
-      a.category === "images" &&
-      `${a.logical_path} ${a.source_path}`
-        .toLowerCase()
-        .includes(imageSearch.value.toLowerCase()),
-  );
-  node(
-    "small",
-    `${found.length}개 중 최대 60개 표시. 검색으로 범위를 좁힐 수 있습니다.`,
-    imageList,
-  );
-  for (const a of found.slice(0, 60)) {
-    const blob = await pkg.image(a.logical_path);
-    if (rev !== galleryRevision) return;
-    const row = node("div", undefined, imageList);
-    row.className = "image-row";
-    node("small", `${blob ? "연결됨" : "미등록"} · ${a.logical_path}`, row);
-    const details = node("details", undefined, row);
-    node("summary", "원본 참조 / 연결 이벤트", details);
-    node(
-      "pre",
-      JSON.stringify(
-        {
-          source: a.source_path,
-          output: a.output_path,
-          events: a.used_by || [],
-          references: a.reference_ids || [],
-        },
-        null,
-        2,
-      ),
-      details,
-    );
-    button("미리보기", () => previewImage(a.logical_path), row);
-  }
+function setMobile(v) {
+  mobileView = v;
+  layout.dataset.mobile = v;
 }
-async function previewImage(logical) {
-  imagePreview.replaceChildren();
-  node("p", logical, imagePreview);
+gameFile.onchange = async () => {
   try {
-    const blob = await pkg.image(logical);
-    if (!blob) throw Error("연결된 이미지가 없습니다");
-    const img = await loadImage(blob);
-    img.alt = logical;
-    imagePreview.append(img);
-  } catch (e) {
-    node("p", e.message, imagePreview);
-  }
-}
-async function renderState() {
-  editor.replaceChildren();
-  if (!state || !pkg) return;
-  const kind = type.value;
-  if (kind === "party") {
-    node("p", "파티 ID: " + state.party.join(", "), editor);
-    return;
-  }
-  let names = [];
-  if (kind === "switches" || kind === "variables")
-    names = await pkg.json("normalized/" + kind + ".json");
-  else names = Object.keys(state[kind]).map((id) => ({ number: id, name: id }));
-  for (const n of names
-    .filter((x) => (x.number + " " + x.name).includes(stateSearch.value))
-    .slice(0, 80)) {
-    const row = node("label", `${n.number} ${n.name || ""}`, editor);
-    const input = node("input", undefined, row);
-    input.type = kind === "switches" || kind === "self" ? "checkbox" : "number";
-    if (input.type === "checkbox") input.checked = !!state[kind][n.number];
-    else input.value = state[kind][n.number] ?? 0;
-    input.onchange = async () => {
-      runner = null;
-      temporary = false;
-      state[kind][n.number] =
-        input.type === "checkbox" ? input.checked : Number(input.value);
-      await save();
-      await showEvents();
-    };
-  }
-}
-type.onchange = renderState;
-stateSearch.oninput = renderState;
-input.onchange = async () => {
-  try {
-    status.textContent = "패키지 검사 중…";
-    const p = await importZip(
-      input.files[0],
-      (i, n) => (status.textContent = `가져오는 중 ${i}/${n}`),
+    status.classList.remove("error");
+    const p = await importZip(gameFile.files[0], (n, t) =>
+      c.status(`게임 자료 읽는 중 ${n}/${t}`),
     );
-    await refreshLibrary();
-    select.value = p.id;
+    await refreshGames();
     await load(p.id);
   } catch (e) {
-    status.textContent = "가져오기 실패: " + e.message;
-  }
-};
-resource.onchange = async () => {
-  if (!pkg) return;
-  try {
-    await importZip(
-      resource.files[0],
-      (i, n) => (status.textContent = `리소스 연결 ${i}/${n}`),
-      pkg,
+    c.error(
+      e.name === "QuotaExceededError"
+        ? "저장 공간이 부족합니다. 브라우저 공간을 확인하고 작은 리소스 묶음부터 추가하세요."
+        : e.message,
     );
-    await pictures(runner?.state || state);
-    await renderer.portrait(pkg, lastMessage);
-    await showResourceReport();
-    await renderGallery();
-    status.textContent = `이미지 ${pkg.lastResourceImport.matched}개 연결 / 파일 ${pkg.lastResourceImport.scanned}개 검사`;
-  } catch (e) {
-    status.textContent = e.message;
   }
 };
-refreshLibrary()
-  .then((list) => {
-    if (list.length) load(list[0].id);
+games.onchange = () => load(games.value).catch((e) => c.error(e.message));
+langSelect.onchange = async () => {
+  language = langSelect.value;
+  c.refreshNames();
+  await renderSession(true);
+};
+modeSelect.onchange = async () => {
+  stopAuto();
+  await archiveSession();
+  c.session = null;
+  mode = modeSelect.value;
+  modeHelp.textContent =
+    mode === "story" ? "스토리 감상: 명령 실행 없이 원본 대사와 분기를 탐색합니다." : mode === "free"
+      ? "자유 감상: 원래 저장 상태에 영향을 주지 않습니다."
+      : "진행 모드: 장면의 상태 변경을 기본 저장에 반영합니다. 이전 버튼은 기본 상태도 복원합니다.";
+  await clearPlayer();
+};
+globalSearch.oninput = () => {
+  renderMaps();
+  renderEvents();
+};
+eventFilter.onchange = () => {
+  eventPage = 0;
+  renderEvents();
+};
+size.onchange = speed.onchange = () => renderSession(true);
+document.addEventListener("keydown", (e) => {
+  if (
+    ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName) ||
+    document.querySelector("dialog[open]") ||
+    activeTab !== "감상"
+  )
+    return;
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    seek((c.session?.history.cursor || 0) - 1);
+  }
+  if (e.key === "ArrowRight" || e.code === "Space") {
+    e.preventDefault();
+    if (c.session?.history.current?.display.type !== "choice") advance();
+  }
+  if (e.key.toLowerCase() === "l") openTab("기록");
+});
+setMobile("장소");
+refreshGames()
+  .then(async (rows) => {
+    const last = await get("meta", "last-game");
+    if (rows.length)
+      await load(rows.find((x) => x.id === last)?.id || rows[0].id);
   })
-  .catch((e) => (status.textContent = "저장소 접근 실패: " + e.message));
+  .catch((e) => c.error(e.message));

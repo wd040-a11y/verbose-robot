@@ -25,8 +25,9 @@ await fs.mkdir("public", { recursive: true });
 await fs.writeFile(
   "public/build-info.json",
   JSON.stringify(
-    { version: "0.2.0", source_sha256: hash.digest("hex") },
+    { version: "0.3.0", source_sha256: hash.digest("hex") },
     null,
     2,
   ),
 );
+

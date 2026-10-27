@@ -34,3 +34,4 @@ RPGMakerExtractor 패키지의 맵·NPC를 선택해 대사와 선택지를 재�
 샘플 생성은 저장소 추출기와 Python jsonschema/Pillow를 사용합니다. `npm run dist:win`은 Windows 포터블 EXE를 빌드합니다. CI는 패키징된 Electron 및 Chromium/WebKit에서 같은 GUI 시나리오를 검사합니다.
 
 `node scripts/compare-package.mjs /path/to/package.zip`은 0.1과 0.2를 같은 정책으로 비교합니다. 실제 게임 원본은 저장소·CI·웹 배포에 포함하지 않습니다. CI 이미지는 자체 제작 합성 자료입니다.
+

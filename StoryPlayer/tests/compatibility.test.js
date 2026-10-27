@@ -280,3 +280,4 @@ test("four command categories distinguish execution from unsupported and skipped
   assert.equal(commandCategory(205), "C");
   assert.equal(commandCategory(355), "D");
 });
+

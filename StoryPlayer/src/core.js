@@ -246,13 +246,20 @@ export class Interpreter {
           case 101:
           case 105: {
             if (s.timer.working) s.timer.known = false;
-            let lines = [];
+            let lines = [],
+              lineIds = [];
             const cont = r.code === 101 ? 401 : 405;
-            while (f.commands[f.pc]?.raw.code === cont)
-              lines.push(f.commands[f.pc++].raw.parameters[0]);
+            while (f.commands[f.pc]?.raw.code === cont) {
+              const line = f.commands[f.pc++];
+              lines.push(line.raw.parameters[0]);
+              lineIds.push(line.id);
+            }
             this.wait = {
               type: "text",
               text: lines.join("\n"),
+              command: command.id,
+              lineIds,
+              context: { ...f.ctx },
               face: r.code === 101 ? p[0] : null,
               faceIndex: p[1],
               speaker: this.engine === "MZ" ? p[4] : null,
@@ -261,7 +268,13 @@ export class Interpreter {
           }
           case 401:
           case 405:
-            this.wait = { type: "text", text: p[0] };
+            this.wait = {
+              type: "text",
+              text: p[0],
+              command: command.id,
+              lineIds: [command.id],
+              context: { ...f.ctx },
+            };
             return this.wait;
           case 102: {
             if (s.timer.working) s.timer.known = false;

@@ -36,3 +36,4 @@ with tempfile.TemporaryDirectory() as temp:
   z.writestr('Wrapper/img/faces/Hero.png',b'not an image')
 print('Synthetic fixtures ready')
 
+
