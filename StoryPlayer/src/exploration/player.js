@@ -7,7 +7,7 @@ export class StoryCursor {
   if(this.done)return {type:'done'};
   if(this.wait?.type==='choice'){
    const w=this.wait;if(!Number.isInteger(answer)||answer<0||answer>=w.choices.length)return w;
-   w.frame.branches[w.indent]=answer;this.log.push({choice:answer,command:w.command});
+   w.frame.branches[w.indent]=w.cancelIndex===answer?"cancel":answer;this.log.push({choice:answer,command:w.command});
    if(w.condition&&answer===1)this.jump(w.frame,[411,412],w.indent);
   }
   this.wait=null;
@@ -19,9 +19,9 @@ export class StoryCursor {
     while(f.commands[f.pc]?.raw.code===continuation){const x=f.commands[f.pc++];lines.push(x.raw.parameters[0]);ids.push(x.id);}
     if(lines.length)return this.wait={type:'text',text:lines.join('\n'),lineIds:ids,face:code===101?p[0]:'',faceIndex:p[1]||0,command:c.id};
    }else if([401,405].includes(code))return this.wait={type:'text',text:p[0],lineIds:[c.id],command:c.id};
-   else if(code===102||code===111)return this.wait={type:'choice',choices:code===102?p[0]:['조건 성립 경로','그 외 경로'],cancel:{mode:'disabled'},condition:code===111,frame:f,indent,command:c.id,sourceCondition:code===111?p:null};
+   else if(code===102||code===111)return this.wait={type:'choice',choices:code===102?[...p[0],...(f.commands.slice(f.pc).some(x=>x.raw.indent===indent&&x.raw.code===403)?['취소 경로']:[])]:['조건 성립 경로','그 외 경로'],cancelIndex:code===102?p[0].length:-1,cancel:{mode:'disabled'},condition:code===111,frame:f,indent,command:c.id,sourceCondition:code===111?p:null};
    else if(code===402&&f.branches[indent]!==p[0])this.jump(f,[402,403,404],indent);
-   else if(code===403)this.jump(f,[404],indent);
+   else if(code===403&&f.branches[indent]!=="cancel")this.jump(f,[404],indent);
    else if(code===411&&f.branches[indent]===0)this.jump(f,[412],indent);
    else if([404,412].includes(code))delete f.branches[indent];
    else if(code===117){

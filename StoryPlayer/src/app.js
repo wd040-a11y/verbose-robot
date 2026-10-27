@@ -593,7 +593,7 @@ async function renderSession(instant = false) {
     w = h.current.display;
   choices.replaceChildren();
   textPlayer.stop();
-  sessionBadge.textContent = session.temporary
+  sessionBadge.textContent = session.staticStory ? `스토리 감상 · 세계 상태 변경 없음 · 실행 효과 미확정 ${h.runner.fidelity.length}건` : session.temporary
     ? "자유 감상 · 기본 저장은 그대로"
     : "진행 모드 · 변경 상태 자동 저장";
   if (!session.temporary) {
@@ -728,19 +728,7 @@ function commitSession() {
 function showStatic() {
   if (!c.session) return;
   return openStory(c.session.event,common,c.pkg);
-/*
-  const d = modal("전체 이벤트 원문 — 미실행 분기 포함");
-  el(
-    "p",
-    "분기 깊이와 명령 위치를 보존한 열람 자료입니다. 실제 대화 기록이 아니며 연결된 공통 이벤트는 별도 원본을 확인해야 합니다.",
-    d,
-  );
-  for (const t of staticText(c.session.page)) {
-    el("p", `${"　".repeat(Math.min(t.indent, 12))}${t.text}`, d);
-    el("small", t.id, d);
-  }
 }
-*/}
 async function historyPanel() {
   const parent = screens["기록"];
   parent.replaceChildren();

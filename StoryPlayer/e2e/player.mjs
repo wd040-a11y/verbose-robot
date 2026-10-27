@@ -37,7 +37,17 @@ try{
  await page.getByLabel('감상 모드').selectOption('free');
  await npc.getByRole('button',{name:'감상하기',exact:true}).click();
  await expect(page.getByText('환영합니다.',{exact:true})).toBeVisible();
- await fs.mkdir('reports',{recursive:true});
+ if(mode!=='electron'){
+  await page.setViewportSize({width:390,height:844});
+  await page.getByLabel('감상 모드').selectOption('story');
+  await page.locator('.mobile-nav').getByRole('button',{name:'장소',exact:true}).click();
+  await page.getByRole('button',{name:/시작 마을/}).click();
+  await expect(page.locator('.explorer')).toHaveAttribute('data-mobile','장면');
+  await npc.getByRole('button',{name:'감상하기',exact:true}).click();
+  await expect(page.locator('.explorer')).toHaveAttribute('data-mobile','재생');
+  await expect(page.getByText('환영합니다.',{exact:true})).toBeVisible();
+ }
+ await fs.mkdir('reports' ,{recursive:true});
  await page.screenshot({path:`reports/integrated-${mode}.png`,fullPage:true});
  if(errors.length)throw Error(errors.join('\n'));
  await fs.writeFile(`reports/gui-${mode}.json`,JSON.stringify({passed:true,mode,checks:['package import','static dialogue','separate branch boundaries','choices','existing interpreter dialogue','resource ZIP counts','static CG decoded and visible','package access audit'],realGame:false},null,2));
