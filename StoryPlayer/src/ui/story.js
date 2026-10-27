@@ -1,3 +1,4 @@
+import {Interpreter,initial} from '../core.js';
 import {loadImage} from '../rendering.js';
 import {storyPage,auditContent} from '../exploration/story.js';
 import {el,button,details,modal,download} from './dom.js';
@@ -26,4 +27,20 @@ export async function openStory(event, common, pkg) {
   }
   for(let i=0;i<event.pages.length;i++){const section=el('details',null,d);el('summary',`페이지 ${i+1} — 독립된 조건`,section);render(await storyPage(event.pages[i],common),section);}
   button('이 이벤트 콘텐츠 검사 JSON',async()=>download('content-audit.json',await auditContent(event.pages,common)),d);
+}
+
+export async function inspectPackage(pkg) {
+ const d=modal('게임 전체 콘텐츠 접근성 검사'), status=el('p','검사 준비 중',d), pages=[];
+ const common=async id=>{const row=pkg.commons.find(x=>x.id===`common_event:${id}`);return row?(await pkg.json(row.file)).page:null;};
+ for(const map of await pkg.json("normalized/maps.json"))for(const event of (await pkg.json(map.file)).events||[])for(const page of event.pages)pages.push({...page,auditContext:{map:map.map_id,event:event.source.event_id}});
+ let count=0;
+ const report=await auditContent(pages,common,async page=>{
+  const runner=new Interpreter({page,state:initial(),context:page.auditContext,engine:pkg.manifest?.engine || "MV",common});
+  let dialogueSeen=false;
+  try{for(let i=0;i<500;i++){const w=await runner.advance(runner.wait?.type==='choice'?0:undefined);dialogueSeen ||= w.type==='text';if(['done','blocked'].includes(w.type))return {status:w.type,dialogueSeen};}return {status:'limit',dialogueSeen};}
+  catch(error){return {status:'error',reason:error.message,dialogueSeen};}
+  finally{status.textContent=`검사 ${++count} / ${pages.length}`;await new Promise(r=>setTimeout(r,0));}
+ });
+ report.policy='초기 상태, 첫 선택지, 페이지당 표시 경계 500회. 전체 경로의 실행 정확성 검사가 아님';
+ details(d,'검사 결과',report);button('보고서 저장',()=>download('package-content-audit.json',report),d);
 }

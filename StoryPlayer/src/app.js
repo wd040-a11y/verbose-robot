@@ -1,5 +1,5 @@
 import "./style.css";
-import { openStory } from "./ui/story.js";
+import { openStory, inspectPackage } from "./ui/story.js";
 import { Package, importZip, library, get, put } from "./storage.js";
 import { Interpreter, initial, clone, selectPage, pageStatus } from "./core.js";
 import { migrateState, seedMap } from "./state.js";
@@ -64,6 +64,7 @@ const top = el("div", null, header, "top-controls"),
   gameFile = input(top, "게임 추출 ZIP", "file");
 gameFile.accept = ".zip,application/zip";
 const games = select(top, "등록된 게임", []);
+button("콘텐츠 접근성 검사",()=>c.pkg && inspectPackage(c.pkg),top);
 const modeSelect = select(top, "감상 모드", [
     ["story", "스토리 감상 (기본)"],
     ["free", "원작 진행 재현 · 임시 상태 (고급)"],
