@@ -7,6 +7,7 @@ if(mode==='electron'){app=await _electron.launch({executablePath:path.resolve(pr
 else{browser=await (mode==='webkit'?webkit:chromium).launch({headless:true});page=await browser.newPage();await page.goto(process.env.PLAYER_URL||'http://127.0.0.1:5173');}
 page.setDefaultTimeout(30000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
 async function advanceToGreeting(){
+ await expect(page.locator('button[aria-busy="true"]')).toHaveCount(0);
  const next=page.getByRole('button',{name:'다음',exact:true});
  for(let i=0;i<3;i++){
   await expect(next).not.toHaveAttribute('aria-busy','true');
