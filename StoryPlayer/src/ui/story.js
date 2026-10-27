@@ -34,7 +34,7 @@ export async function inspectPackage(pkg) {
  const d=modal('게임 전체 콘텐츠 접근성 검사'), status=el('p','검사 준비 중',d), pages=[];
  const common=async id=>{const row=pkg.commons.find(x=>x.id===`common_event:${id}`);return row?(await pkg.json(row.file)).page:null;};
  for(const map of await pkg.json("normalized/maps.json"))for(const event of (await pkg.json(map.file)).events||[])for(const page of event.pages)pages.push({...page,auditContext:{map:map.map_id,event:event.source.event_id}});
- const report={schema_version:'1.0.0',package_id:pkg.manifest.package_id,pages:[],counts:{},causes:{},dialoguePages:0,original_folder_checked:false};
+ const report={schema_version:'1.0.0',package_id:pkg.manifest.package_id,pages:[],counts:{},causes:{},effect_causes:{},dialoguePages:0,original_folder_checked:false};
  const cache=new Map();
  const resource=async path=>{
   if(cache.has(path))return cache.get(path);
@@ -46,6 +46,7 @@ export async function inspectPackage(pkg) {
  };
  for(let i=0;i<pages.length;i++){
   const page=await auditPage(pages[i],{common,resource,progress:async(paths,pending)=>{status.textContent=`페이지 ${i+1}/${pages.length} · 검사 경로 ${paths} · 대기 ${pending}`;await new Promise(r=>setTimeout(r,0));}});
+  for(const effect of page.uncertain_effects)report.effect_causes[effect.reason]=(report.effect_causes[effect.reason]||0)+1;
   report.pages.push(page);if(page.contents.some(c=>c.kind==='dialogue'))report.dialoguePages++;
   for(const [k,v] of Object.entries(page.counts))report.counts[k]=(report.counts[k]||0)+v;
   for(const [k,v] of Object.entries(page.causes))report.causes[k]=(report.causes[k]||0)+v;
