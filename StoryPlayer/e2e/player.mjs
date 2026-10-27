@@ -1,4 +1,4 @@
-import { chromium, webkit, _electron } from "@playwright/test";
+import { chromium, webkit, _electron, expect } from "@playwright/test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -80,7 +80,7 @@ try {
   await page.getByText("문이 열렸습니다.", { exact: true }).waitFor();
   const sw = () =>
     page.locator("label").filter({ hasText: "1 문 열림" }).locator("input");
-  assert.equal(await sw().isChecked(), true);
+  await expect(sw()).toBeChecked();
   assert.equal(await page.locator(".picture").count(), 1);
   assert.equal(await picture.evaluate((x) => x.style.left), "400px");
   assert.equal(
@@ -103,19 +103,19 @@ try {
   await page
     .getByRole("button", { name: "실행 전으로 되돌리기", exact: true })
     .click();
-  assert.equal(await sw().isChecked(), false);
+  await expect(sw()).not.toBeChecked();
   await npc()
     .getByRole("button", { name: "임시 상태로 강제 감상", exact: true })
     .click();
   await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.getByRole("button", { name: "문 열기", exact: true }).click();
   await page.getByText("문이 열렸습니다.", { exact: true }).waitFor();
-  assert.equal(await sw().isChecked(), false);
+  await expect(sw()).not.toBeChecked();
   // A new normal execution starts from the unchanged real world.
   await npc().getByRole("button", { name: "일반 실행", exact: true }).click();
   await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.getByRole("button", { name: "문 열기", exact: true }).click();
-  assert.equal(await sw().isChecked(), true);
+  await expect(sw()).toBeChecked();
   await page
     .locator("article")
     .filter({ hasText: "호환 처리 필요" })
@@ -127,7 +127,7 @@ try {
   await page.getByText("엔딩입니다.", { exact: true }).waitFor();
   await page.reload();
   await map.waitFor();
-  assert.equal(await sw().isChecked(), true);
+  await expect(sw()).toBeChecked();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: `reports/${mode}-mobile.png`, fullPage: true });
   assert.equal(
