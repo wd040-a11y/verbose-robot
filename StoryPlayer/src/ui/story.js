@@ -53,5 +53,5 @@ export async function inspectPackage(pkg) {
  }
  status.textContent=`검사 완료 · ${pages.length}페이지 · 미확정 항목은 성공으로 집계하지 않았습니다.`;
  report.policy='페이지당 최대 128경로 / 경로당 2000 표시 경계. 모든 경로 도달 가능성이나 원작 실행 재현을 보장하지 않음. 원본 폴더 미검사. 미디어 바이너리·암호화 키 제외.';
- details(d,'검사 결과',report);button('보고서 저장',()=>download('package-content-audit.json',report),d);
+ details(d,'검사 결과',{pages:report.pages.length,dialoguePages:report.dialoguePages,counts:report.counts,causes:report.causes,effect_causes:report.effect_causes,policy:report.policy});button('보고서 저장',()=>download('package-content-audit.json',report),d);
 }
