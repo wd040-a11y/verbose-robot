@@ -1,3 +1,4 @@
+import {auditPage} from '../exploration/access-audit.js';
 import {Interpreter,initial} from '../core.js';
 import {loadImage} from '../rendering.js';
 import {storyPage,auditContent} from '../exploration/story.js';
@@ -33,21 +34,23 @@ export async function inspectPackage(pkg) {
  const d=modal('게임 전체 콘텐츠 접근성 검사'), status=el('p','검사 준비 중',d), pages=[];
  const common=async id=>{const row=pkg.commons.find(x=>x.id===`common_event:${id}`);return row?(await pkg.json(row.file)).page:null;};
  for(const map of await pkg.json("normalized/maps.json"))for(const event of (await pkg.json(map.file)).events||[])for(const page of event.pages)pages.push({...page,auditContext:{map:map.map_id,event:event.source.event_id}});
- let count=0;
- const report=await auditContent(pages,common,async page=>{
-  const runner=new Interpreter({page,state:initial(),context:page.auditContext,engine:pkg.manifest?.engine || "MV",common});
-  let dialogueSeen=false;
-  try{for(let i=0;i<500;i++){const w=await runner.advance(runner.wait?.type==='choice'?0:undefined);dialogueSeen ||= w.type==='text';if(['done','blocked'].includes(w.type))return {status:w.type,dialogueSeen};}return {status:'limit',dialogueSeen};}
-  catch(error){return {status:'error',reason:error.message,dialogueSeen};}
-  finally{status.textContent=`검사 ${++count} / ${pages.length}`;await new Promise(r=>setTimeout(r,0));}
- });
- report.moviePages=pages.filter(p=>p.commands.some(c=>c.raw.code===261)).length;
- report.media=[];
- for(const asset of await pkg.json('normalized/assets.json')) {
-  if(!['images','movies'].includes(asset.category))continue;
-  const blob=await pkg.image(asset.logical_path);
-  report.media.push({id:asset.id,logical_path:asset.logical_path,category:asset.category,extraction_status:asset.status,connected:!!blob,mime:blob?.type||null,originalPresence:'원본 폴더 미검사',codecPlayback:'미검증'});
+ const report={schema_version:'1.0.0',package_id:pkg.manifest.package_id,pages:[],counts:{},causes:{},dialoguePages:0,original_folder_checked:false};
+ const cache=new Map();
+ const resource=async path=>{
+  if(cache.has(path))return cache.get(path);
+  const blob=await pkg.image(path);let result={status:'missing'};
+  if(blob){result={status:'unverified',mime:blob.type,reason:'codec_or_decode_unverified'};
+   if(blob.type.startsWith('image/'))try{await loadImage(blob);result={status:'decoded',mime:blob.type};}catch{result={status:'invalid',reason:'image_decode_failed'};}
+  }
+  cache.set(path,result);return result;
+ };
+ for(let i=0;i<pages.length;i++){
+  const page=await auditPage(pages[i],{common,resource,progress:async(paths,pending)=>{status.textContent=`페이지 ${i+1}/${pages.length} · 검사 경로 ${paths} · 대기 ${pending}`;await new Promise(r=>setTimeout(r,0));}});
+  report.pages.push(page);if(page.contents.some(c=>c.kind==='dialogue'))report.dialoguePages++;
+  for(const [k,v] of Object.entries(page.counts))report.counts[k]=(report.counts[k]||0)+v;
+  for(const [k,v] of Object.entries(page.causes))report.causes[k]=(report.causes[k]||0)+v;
  }
- report.policy='초기 상태, 첫 선택지, 페이지당 표시 경계 500회. 전체 경로의 실행 정확성 검사가 아님';
+ status.textContent=`검사 완료 · ${pages.length}페이지 · 미확정 항목은 성공으로 집계하지 않았습니다.`;
+ report.policy='페이지당 최대 128경로 / 경로당 2000 표시 경계. 모든 경로 도달 가능성이나 원작 실행 재현을 보장하지 않음. 원본 폴더 미검사. 미디어 바이너리·암호화 키 제외.';
  details(d,'검사 결과',report);button('보고서 저장',()=>download('package-content-audit.json',report),d);
 }

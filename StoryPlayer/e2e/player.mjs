@@ -6,12 +6,19 @@ let app,browser,page;
 if(mode==='electron'){app=await _electron.launch({executablePath:path.resolve(process.env.PLAYER_EXE)});page=await app.firstWindow();}
 else{browser=await (mode==='webkit'?webkit:chromium).launch({headless:true});page=await browser.newPage();await page.goto(process.env.PLAYER_URL||'http://127.0.0.1:5173');}
 page.setDefaultTimeout(30000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+async function advanceToGreeting(){
+ for(let i=0;i<4;i++){
+  if(await page.getByText('환영합니다.',{exact:true}).isVisible())return;
+  await page.getByRole('button',{name:'다음',exact:true}).click();
+ }
+ await expect(page.getByText('환영합니다.',{exact:true})).toBeVisible();
+}
 try{
  await page.locator('input[type=file]').first().setInputFiles(path.resolve('fixtures/sample.zip'));
  await page.getByRole('button',{name:/시작 마을/}).click();
  const npc=page.locator('article').filter({hasText:'안내 NPC'});
  await npc.getByRole('button',{name:'감상하기',exact:true}).click();
- await expect(page.getByText('환영합니다.',{exact:true})).toBeVisible();
+ await advanceToGreeting();
  await page.getByRole('button',{name:'다음',exact:true}).click();
  await expect(page.getByRole('button',{name:'문 열기',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'돌아가기',exact:true}).click();
@@ -34,9 +41,30 @@ try{
  await dialog.getByText('검사 결과',{exact:true}).click();
  await expect(dialog.locator('pre')).toContainText('dialoguePages');
  await dialog.getByRole('button',{name:'닫기',exact:true}).click();
+ await expect(page.locator('article').filter({hasText:'시스템 전용'})).toHaveCount(0);
+ const cgOnly=page.locator('article').filter({hasText:'CG 전용'});
+ await cgOnly.getByRole('button',{name:'감상하기',exact:true}).click();
+ await expect(page.locator('.picture-layer img')).toHaveCount(1);
+ await page.getByRole('button',{name:'다음',exact:true}).click();
+ await expect(page.locator('.picture-layer img')).toHaveCount(0);
+ await page.getByRole('button',{name:'이전',exact:true}).click();
+ await expect(page.locator('.picture-layer img')).toHaveCount(1);
+ const movieEvent=page.locator('article').filter({hasText:'영상 검증'});
+ await movieEvent.getByRole('button',{name:'감상하기',exact:true}).click();
+ await page.getByRole('button',{name:'동영상 재생',exact:true}).click();
+ await expect(dialog.getByText(/연결 자료에 동영상이 없습니다/)).toBeVisible();
+ await dialog.getByRole('button',{name:'닫기',exact:true}).click();
+ await page.getByRole('button',{name:'리소스',exact:true}).click();
+ await page.getByLabel('이미지 리소스 ZIP').setInputFiles(path.resolve('fixtures/movies.zip'));
+ await expect(page.getByText(/검사 1개 · 정상 연결 1개/)).toBeVisible();
+ await page.getByRole('button',{name:'감상',exact:true}).click();
+ await page.getByRole('button',{name:'동영상 재생',exact:true}).click();
+ await expect(dialog.locator('video')).toBeVisible();
+ if(mode!=='webkit')await expect.poll(()=>dialog.locator('video').evaluate(v=>v.readyState)).toBeGreaterThanOrEqual(2);
+ await dialog.getByRole('button',{name:'닫기',exact:true}).click();
  await page.getByLabel('감상 모드').selectOption('free');
  await npc.getByRole('button',{name:'감상하기',exact:true}).click();
- await expect(page.getByText('환영합니다.',{exact:true})).toBeVisible();
+ await advanceToGreeting();
  if(mode!=='electron'){
   await page.setViewportSize({width:390,height:844});
   await page.getByLabel('감상 모드').selectOption('story');
@@ -45,7 +73,7 @@ try{
   await expect(page.locator('.explorer')).toHaveAttribute('data-mobile','장면');
   await npc.getByRole('button',{name:'감상하기',exact:true}).click();
   await expect(page.locator('.explorer')).toHaveAttribute('data-mobile','재생');
-  await expect(page.getByText('환영합니다.',{exact:true})).toBeVisible();
+  await advanceToGreeting();
  }
  await fs.mkdir('reports' ,{recursive:true});
  await page.screenshot({path:`reports/integrated-${mode}.png`,fullPage:true});

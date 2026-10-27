@@ -605,7 +605,7 @@ async function renderSession(instant = false) {
   await renderer.portrait(c.pkg, w.type === "text" ? w : null);
   if (epoch !== renderEpoch) return;
   previous.disabled = h.cursor <= 0;
-  next.disabled = !["text", "yield", "transfer"].includes(w.type);
+  next.disabled = !["text", "yield", "transfer", "visual", "movie"].includes(w.type);
   diagnostics.replaceChildren();
   details(diagnostics, "원본 실행 정보 / 주의 사항", {
     command: w.command,
@@ -647,6 +647,11 @@ async function renderSession(instant = false) {
     );
     if (w.cancel.mode !== "disabled")
       button("선택 취소", () => advance("cancel"), choices);
+  } else if (w.type === "visual") {
+    dialogue.textContent = ({show:"그림 표시",move:"그림 변경",erase:"그림 삭제"})[w.action]+" · 다음으로 계속 감상하세요.";
+  } else if (w.type === "movie") {
+    dialogue.textContent="동영상 장면 · "+w.name;
+    button("동영상 재생",()=>movieViewer(c.pkg,w.name),choices);
   } else if (w.type === "blocked") {
     stopAuto();
     dialogue.textContent = `이 장면은 호환 처리가 필요합니다.\n${w.message}\n다른 장면은 계속 감상할 수 있습니다.`;

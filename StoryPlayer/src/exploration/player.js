@@ -30,13 +30,14 @@ export class StoryCursor {
    }else if(code===231){
     this.state.pictures[p[0]]={name:p[1],origin:p[2],x:p[3]===0?p[4]:0,y:p[3]===0?p[5]:0,zoomX:p[6],zoomY:p[7],opacity:p[8],blend:p[9]};
     if(p[3]!==0)this.fidelity.push({kind:'unknown',command:c.id,message:'변수 좌표 미확정 — 미리보기 원점 사용'});
-   }else if(code===232){const pic=this.state.pictures[p[0]];if(pic)Object.assign(pic,{origin:p[2],x:p[3]===0?p[4]:pic.x,y:p[3]===0?p[5]:pic.y,zoomX:p[6],zoomY:p[7],opacity:p[8]});}
-   else if(code===235)delete this.state.pictures[p[0]];
-   else if(code===261){this.state.storyMovie=p[0];return this.wait={type:'text',text:'동영상: '+p[0],command:c.id};}
+    return this.wait={type:'visual',action:'show',command:c.id,picture:p[0]};
+   }else if(code===232){const pic=this.state.pictures[p[0]];if(pic)Object.assign(pic,{origin:p[2],x:p[3]===0?p[4]:pic.x,y:p[3]===0?p[5]:pic.y,zoomX:p[6],zoomY:p[7],opacity:p[8]});return this.wait={type:'visual',action:'move',command:c.id,picture:p[0]};}
+   else if(code===235){delete this.state.pictures[p[0]];return this.wait={type:'visual',action:'erase',command:c.id,picture:p[0]};}
+   else if(code===261){this.state.storyMovie=p[0];return this.wait={type:'movie',name:p[0],command:c.id};}
    else if([112,113,413,118,119,115].includes(code)){
     this.fidelity.push({kind:'unknown',command:c.id,message:'반복·점프의 실행 순서는 재현하지 않음. 이후 원본 구간 탐색'});
     return this.wait={type:'text',text:'제어 흐름 경계 — 이후 구간은 원본 순서로 탐색하며 실제 연결은 미확정입니다.',command:c.id};
-   }else if(![0,505].includes(code))this.fidelity.push({kind:'unknown',command:c.id,message:`명령 ${code} 실행 효과 미확정`});
+   }else if(![0,505,402,403,411,404,412].includes(code))this.fidelity.push({kind:'unknown',command:c.id,message:`명령 ${code} 실행 효과 미확정`});
   }
   if(!this.stack.length){this.done=true;return {type:'done'};}return {type:'yield'};
  }
