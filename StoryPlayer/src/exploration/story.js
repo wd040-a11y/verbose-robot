@@ -7,7 +7,7 @@ export async function storyPage(page, common = async () => null, seen = new Set(
     if ([401,405].includes(code)) node.kind='dialogue';
     if (code===102) node.kind='choices';
     if ([111,411,412,402,403,404,112,113,413,118,119].includes(code)) node.kind='branch';
-    if ([231,232,235].includes(code)) node.kind='picture';
+    if ([231,232,235,261].includes(code)) node.kind='picture';
     if ([355,655,356,357].includes(code)) node.kind='unresolved';
     if (code===117) {
       node.kind='common';

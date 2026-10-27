@@ -1,6 +1,6 @@
 // Presentation-only cursor. Never evaluates scripts or writes game switches.
 export class StoryCursor {
- constructor({page,state,context,common}){this.state=structuredClone(state);this.state.pictures={};this.stack=[this.frame(page,context)];this.common=common;this.wait=null;this.done=false;this.steps=0;this.log=[];this.fidelity=[];}
+ constructor({page,state,context,common}){this.state=structuredClone(state);this.state.pictures={};this.state.storyStatic=true;this.stack=[this.frame(page,context)];this.common=common;this.wait=null;this.done=false;this.steps=0;this.log=[];this.fidelity=[];}
  frame(page,ctx){return {commands:page.commands||[],pc:0,ctx,branches:{}};}
  jump(f,codes,indent){for(;f.pc<f.commands.length;f.pc++){const r=f.commands[f.pc].raw;if(r.indent<indent||(r.indent===indent&&codes.includes(r.code)))return;}}
  async advance(answer){

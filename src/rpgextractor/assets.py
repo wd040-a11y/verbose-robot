@@ -17,6 +17,7 @@ def media_type(head: bytes):
     if head.startswith(b"\xff\xd8\xff"): return ".jpg"
     if head[:6] in (b"GIF87a",b"GIF89a"): return ".gif"
     if head[:4]==b"RIFF" and head[8:12]==b"WEBP": return ".webp"
+    if head.startswith(bytes.fromhex("1a45dfa3")): return ".webm"
     return None
 
 def validate_media(path: Path, suffix: str):
@@ -101,7 +102,9 @@ def process_asset(source: Path, root: Path, output: Path, system, options, cance
     encrypted=head[:16]==HEADER
     suffix=source.suffix.lower()
     suspected=suffix in ENCRYPTED or suffix.rstrip("_") in ENCRYPTED or head.startswith(b"RPGMV")
-    detected=media_type(head); record["detected_format"]=detected
+    detected=media_type(head)
+    if category=="movies" and head[4:8]==b"ftyp": detected=".mp4"
+    record["detected_format"]=detected
     # Preserve relative original name in target; appending restored extension avoids collisions.
     # Source-path hash directories prevent suffix and case-only collisions.
     dest=output/"assets"/category/record["id"].split(":",1)[1]/source.name
@@ -130,3 +133,4 @@ def process_asset(source: Path, root: Path, output: Path, system, options, cance
     record["output_path"]=dest.relative_to(output).as_posix()
     record["output_sha256"]=digest(dest,cancel)
     return record
+

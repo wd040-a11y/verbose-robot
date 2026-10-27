@@ -68,6 +68,7 @@ export function resolveTokens(
     if (t.type === "text") return t;
     const n = Number(t.arg),
       valid = /^\d+$/.test(t.arg ?? "");
+    if (state.storyStatic && ["V","P"].includes(t.code)) return {type:"text",text:t.raw,warning:"정적 감상: 동적 값 미확정"};
     if (t.code === "V" && valid)
       return { type: "text", text: String(state.variables[n] ?? 0) };
     if (t.code === "N" && valid)

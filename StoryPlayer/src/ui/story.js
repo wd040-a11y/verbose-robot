@@ -41,6 +41,13 @@ export async function inspectPackage(pkg) {
   catch(error){return {status:'error',reason:error.message,dialogueSeen};}
   finally{status.textContent=`검사 ${++count} / ${pages.length}`;await new Promise(r=>setTimeout(r,0));}
  });
+ report.moviePages=pages.filter(p=>p.commands.some(c=>c.raw.code===261)).length;
+ report.media=[];
+ for(const asset of await pkg.json('normalized/assets.json')) {
+  if(!['images','movies'].includes(asset.category))continue;
+  const blob=await pkg.image(asset.logical_path);
+  report.media.push({id:asset.id,logical_path:asset.logical_path,category:asset.category,extraction_status:asset.status,connected:!!blob,mime:blob?.type||null,originalPresence:'원본 폴더 미검사',codecPlayback:'미검증'});
+ }
  report.policy='초기 상태, 첫 선택지, 페이지당 표시 경계 500회. 전체 경로의 실행 정확성 검사가 아님';
  details(d,'검사 결과',report);button('보고서 저장',()=>download('package-content-audit.json',report),d);
 }

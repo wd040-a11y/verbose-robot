@@ -279,6 +279,7 @@ class Extractor:
 
     def extract(self, files):
         data_files=[p for p in files if p.parent==self.candidate.data_dir and p.suffix.lower()==self.adapter.extension and not re.match(r"Save\d+$",p.stem,re.I)]
+        if not data_files: raise ValueError("핵심 게임 데이터 파일이 0개입니다.")
         system_path=self.candidate.data_dir/("System"+self.adapter.extension)
         # Read key only to decrypt; never log or include it in normalized data.
         try:
@@ -683,4 +684,5 @@ class Extractor:
         final_errors=validate_package(self.output,cancel=self.cancel)
         if final_errors: raise ValueError("최종 출력 스키마 검사 실패. 결과를 정상 패키지로 사용하지 마세요.")
         self.progress("완료",1,1,sum(x["severity"]=="error" for x in self.issues))
+
 
