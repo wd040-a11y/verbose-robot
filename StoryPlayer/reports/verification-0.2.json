@@ -1,0 +1,98 @@
+{
+  "version": "0.2.0",
+  "application_commit": "55e3369bd521f31e49b89047e61c9936f46522f0",
+  "source_sha256": "fd95e6e37dba2c9b9659c696eda1b6cde38ab699b4c9a748ac6c04d8dfd9e432",
+  "workflow_run": 40482270067,
+  "workflow_url": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40482270067",
+  "web": {
+    "url": "https://rpg-story-player-wd040.dionisauce.chatgpt.site",
+    "source_commit": "7c9074bcfa8c0ccb58867e7ecabea24fc1ed29d7",
+    "deployment_id": "appgdep_6ae07174ae088191aefe545e2cd3d5e1"
+  },
+  "automated_tests": 32,
+  "real_package": {
+    "pages": 1181,
+    "completed_before": 671,
+    "completed_after": 1160,
+    "blocked_before": 510,
+    "blocked_after": 21,
+    "newly_completed": 489,
+    "completion_regressions": 0,
+    "legacy_state_field_regressions": 0,
+    "simplified_completed": 161,
+    "block_codes": {
+      "205": 4,
+      "355": 1,
+      "356": 16
+    },
+    "policy": "fresh System defaults per page; first choice; 2000 resumes/100000 commands; not all paths; not original-engine equivalence"
+  },
+  "images": {
+    "fixture": "self-created synthetic face sheet and CG",
+    "scanned": 4,
+    "connected": 2,
+    "no_reference": 1,
+    "invalid": 1,
+    "face_index": 5,
+    "face_pixel_rgba": [
+      30,
+      220,
+      220,
+      255
+    ]
+  },
+  "limitations": [
+    "iOS physical device not tested",
+    "Actual package was MV and intentionally lacked images; no real-game image claim",
+    "Collision, parallel scheduling, battle and arbitrary scripts are not emulated",
+    "161 completed pages include movement/time simplification; completion does not establish original-game equivalence"
+  ],
+  "status": "passed",
+  "tests": {
+    "unit": {
+      "passed": 32,
+      "failed": 0
+    },
+    "gui": {
+      "electron": true,
+      "chromium": true,
+      "webkit": true
+    },
+    "portable": {
+      "subsystem": 2,
+      "guiWindow": true,
+      "portableLaunched": true
+    }
+  },
+  "source_match": {
+    "canonical_source_hash": true,
+    "javascript_and_css_byte_identical": true,
+    "html_difference": "line endings and blank lines only"
+  },
+  "artifacts": [
+    {
+      "name": "RPGStoryPlayer-Windows",
+      "id": 12723896286,
+      "sha256": "sha256:c9c0abdffb9a826f410d210a1eca5e6a4c211e7e9f2c9a2cc90aeb7d62fc6b92",
+      "url": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40482270067/artifacts/12723896286"
+    },
+    {
+      "name": "StoryPlayer-Web-0.2.0",
+      "id": 12723816265,
+      "sha256": "sha256:4c58c65c32c6b9a7a6d071c56579abc7f619a27f9931a4dca00a89fbcc063d65",
+      "url": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40482270067/artifacts/12723816265"
+    },
+    {
+      "name": "StoryPlayer-Test-Evidence",
+      "id": 12723676607,
+      "sha256": "sha256:4f8c3b49e9f93c19b231824948a6e14e0beb8be64cb596edd9326106b4879bb6",
+      "url": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40482270067/artifacts/12723676607"
+    },
+    {
+      "name": "StoryPlayer-Samples-0.2.0",
+      "id": 12723661753,
+      "sha256": "sha256:26a544144ca2467ed565a02987ce2b4310f4239286d620ba52aba7e3012651a5",
+      "url": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40482270067/artifacts/12723661753"
+    }
+  ]
+}
