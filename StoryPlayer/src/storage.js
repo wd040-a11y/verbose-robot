@@ -124,7 +124,7 @@ export class Package {
   }
 }
 export async function importZip(file, progress, existing) {
-  // Sequential native Streams avoid worker-pool stalls observed in WebKit.
+  // Read sequentially with native Streams, without worker lifecycle dependencies.
   // CRC checks and per-entry/total size limits remain enabled.
   const zip = new ZipReader(new BlobReader(file), { useWebWorkers: false });
   try {

@@ -237,3 +237,17 @@ pre {
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
 }
+
+/* Native WebKit menus otherwise paint a light background under inherited light text. */
+:root { color-scheme: dark; }
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  color: #e4eaf3;
+  background-color: #25334a;
+  padding-right: 26px;
+  background-image: linear-gradient(45deg, transparent 50%, #cad6e6 50%), linear-gradient(135deg, #cad6e6 50%, transparent 50%);
+  background-position: calc(100% - 12px) center, calc(100% - 7px) center;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
