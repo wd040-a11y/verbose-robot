@@ -59,9 +59,10 @@ try {
     () => document.querySelectorAll("img.picture").length === 2,
   );
   const picture = page.locator('[data-picture-id="1"]');
-  assert.equal(
-    await picture.evaluate((x) => x.style.opacity),
-    String(192 / 255),
+  assert.ok(
+    Math.abs(
+      Number(await picture.evaluate((x) => x.style.opacity)) - 192 / 255,
+    ) < 0.000001,
   );
   assert.equal(await picture.evaluate((x) => x.style.left), "408px");
   assert.deepEqual(

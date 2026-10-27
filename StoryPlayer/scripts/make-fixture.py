@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory() as temp:
  for i,color in enumerate(colors):draw.rectangle((i%4*144,i//4*144,i%4*144+143,i//4*144+143),fill=color)
  face_path=game/'img/faces/Faces.png';face.save(face_path)
  cg=Image.new('RGB',(320,240),(40,80,140));cgbytes=io.BytesIO();cg.save(cgbytes,format='PNG');png=cgbytes.getvalue()
- image_path=game/'img/pictures/scene.png';image_path.save if False else None
+ image_path=game/'img/pictures/scene.png'
  # Replace the synthetic encrypted image with a normal PNG for resource tests.
  for file in image_path.parent.glob('scene.*'):file.unlink()
  image_path.write_bytes(png)
