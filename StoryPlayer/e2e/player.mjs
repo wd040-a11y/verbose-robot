@@ -17,11 +17,24 @@ try{
  await expect(dialog.getByText('문 열기',{exact:true})).toBeVisible();
  await expect(dialog.getByText(/분기 경계/).first()).toBeVisible();
  await dialog.getByRole('button',{name:'닫기',exact:true}).click();
+ await page.getByRole('button',{name:'리소스',exact:true}).click();
+ await page.getByLabel('이미지 리소스 ZIP').setInputFiles(path.resolve('fixtures/images.zip'));
+ await expect(page.getByText(/검사 4개 · 정상 연결 2개/)).toBeVisible();
+ await page.getByRole('button',{name:'감상',exact:true}).click();
+ await npc.getByRole('button',{name:'감상하기',exact:true}).click();
+ await dialog.getByText(/페이지 1 — 독립된 조건/).click();
+ await dialog.getByRole('button',{name:'이 CG 보기',exact:true}).first().click();
+ await expect(dialog.getByRole('img',{name:'scene',exact:true})).toBeVisible();
+ await dialog.getByRole('button',{name:'닫기',exact:true}).click();
+ await page.getByRole('button',{name:'콘텐츠 접근성 검사',exact:true}).click();
+ await dialog.getByText('검사 결과',{exact:true}).click();
+ await expect(dialog.locator('pre')).toContainText('dialoguePages');
+ await dialog.getByRole('button',{name:'닫기',exact:true}).click();
  await page.getByLabel('감상 모드').selectOption('free');
  await npc.getByRole('button',{name:'감상하기',exact:true}).click();
  await expect(page.getByText('환영합니다.',{exact:true})).toBeVisible();
  await fs.mkdir('reports',{recursive:true});
  await page.screenshot({path:`reports/integrated-${mode}.png`,fullPage:true});
  if(errors.length)throw Error(errors.join('\n'));
- await fs.writeFile(`reports/gui-${mode}.json`,JSON.stringify({passed:true,mode,checks:['package import','static dialogue','separate branch boundaries','choices','existing interpreter dialogue'],realGame:false},null,2));
+ await fs.writeFile(`reports/gui-${mode}.json`,JSON.stringify({passed:true,mode,checks:['package import','static dialogue','separate branch boundaries','choices','existing interpreter dialogue','resource ZIP counts','static CG decoded and visible','package access audit'],realGame:false},null,2));
 }finally{await app?.close();await browser?.close();}
