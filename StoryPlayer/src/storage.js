@@ -28,11 +28,27 @@ export async function get(store, key) {
   const d = await db;
   return new Promise((ok, no) => {
     const r = d.transaction(store).objectStore(store).get(key);
-    r.onsuccess = () => ok(r.result);
+    r.onsuccess = () => {
+      const value = r.result;
+      // 0.1 stores remain readable; new records avoid browser-specific Blob persistence.
+      ok(
+        store === "files" && value?.kind === "rpg-bytes-v1"
+          ? new Blob([value.bytes], { type: value.mime })
+          : value,
+      );
+    };
     r.onerror = () => no(r.error);
   });
 }
 export async function put(store, key, v) {
+  // Read bytes before opening the transaction: awaiting Blob IO inside an IDB
+  // transaction can also make it inactive. Existing file-size limits bound this copy.
+  if (store === "files" && v instanceof Blob)
+    v = {
+      kind: "rpg-bytes-v1",
+      mime: v.type,
+      bytes: new Uint8Array(await v.arrayBuffer()),
+    };
   const d = await db;
   return new Promise((ok, no) => {
     const t = d.transaction(store, "readwrite");
