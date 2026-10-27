@@ -1,3 +1,10 @@
+import {
+  resourceIndex,
+  resolveResource,
+  inspectImage,
+  normalizePath,
+} from "./resources.js";
+import { buildRegistry } from "./plugins/registry.js";
 import Ajv from "ajv/dist/2020.js";
 import schema from "./package.schema.json" with { type: "json" };
 const validate = new Ajv({ strict: false, allErrors: false }).compile(schema);
@@ -66,6 +73,27 @@ export class Package {
     if (this.cache.size > 8) this.cache.delete(this.cache.keys().next().value);
     return v.data;
   }
+  async source(path) {
+    if (!safe(path)) return null;
+    const b = await get("files", this.id + "/" + path);
+    return b && b.size <= 4 * 1024 * 1024 ? await b.arrayBuffer() : null;
+  }
+  async plugins() {
+    let metadata;
+    try {
+      metadata = await this.json("normalized/plugins.json");
+    } catch {
+      return buildRegistry();
+    }
+    return buildRegistry(metadata, (p) => this.source(p));
+  }
+  async imageEntries() {
+    const assets = await this.json("normalized/assets.json");
+    const result = [];
+    for (const a of assets.filter((x) => x.category === "images"))
+      result.push({ ...a, connected: !!(await this.image(a.logical_path)) });
+    return result;
+  }
   async image(logical) {
     const assets = await this.json("normalized/assets.json");
     const a = assets.find((x) => x.logical_path === logical);
@@ -88,9 +116,10 @@ export async function importZip(file, progress, existing) {
     const paths = new Set();
     for (const e of entries) {
       if (e.directory) continue;
-      if (!safe(e.filename) || paths.has(e.filename.toLowerCase()))
+      const entryPath = existing ? normalizePath(e.filename) : e.filename;
+      if (!safe(entryPath) || paths.has(entryPath.toLowerCase()))
         throw Error("중복/안전하지 않은 ZIP 경로");
-      paths.add(e.filename.toLowerCase());
+      paths.add(entryPath.toLowerCase());
       total += e.uncompressedSize;
       if (e.uncompressedSize > 128 * 1024 * 1024 || total > 2 * 1024 ** 3)
         throw Error("ZIP 처리 한도 초과");
@@ -100,50 +129,68 @@ export async function importZip(file, progress, existing) {
         e.filename === "manifest.json" || e.filename.endsWith("/manifest.json"),
     );
     if (existing) {
-      let i = 0,
-        matched = 0;
+      const report = {
+        scanned: 0,
+        matched: 0,
+        noReference: 0,
+        invalid: 0,
+        ambiguous: 0,
+        files: [],
+      };
+      const index = resourceIndex(
+        existing.assets || (await existing.json("normalized/assets.json")),
+      );
+      const targets = new Map();
+      for (const e of entries.filter((e) => !e.directory)) {
+        const a = resolveResource(e.filename, index).asset;
+        if (a)
+          targets.set(a.logical_path, (targets.get(a.logical_path) || 0) + 1);
+      }
+      const resolved = new Set();
       for (const e of entries) {
         if (e.directory) continue;
-        const name = e.filename;
-        const match = existing.assets.find(
-          (a) =>
-            a.category === "images" &&
-            [
-              a.output_path,
-              a.source_path,
-              ...[".png", ".jpg", ".jpeg", ".webp"].map(
-                (ext) => a.logical_path + ext,
-              ),
-            ]
-              .filter(Boolean)
-              .some((p) => name === p || name.endsWith("/" + p)),
-        );
-        if (match) {
-          const blob = await e.getData(new BlobWriter(), {
-            checkSignature: true,
-          });
-          const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
-          const png =
-              bytes[0] === 137 &&
-              bytes[1] === 80 &&
-              bytes[2] === 78 &&
-              bytes[3] === 71,
-            jpg = bytes[0] === 255 && bytes[1] === 216,
-            webp =
-              String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
-              String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
-          if (!png && !jpg && !webp)
-            throw Error("일반 이미지로 복원된 PNG/JPEG/WebP가 필요합니다");
-          await put(
-            "files",
-            existing.id + "/resource/" + match.logical_path,
-            blob,
-          );
-          matched++;
+        report.scanned++;
+        const match = resolveResource(e.filename, index);
+        if (!match.asset) {
+          if (match.reason === "ambiguous_reference") report.ambiguous++;
+          else report.noReference++;
+          report.files.push({ path: e.filename, status: match.reason });
+        } else if (targets.get(match.asset.logical_path) > 1) {
+          report.ambiguous++;
+          report.files.push({ path: e.filename, status: "duplicate_target" });
+        } else {
+          try {
+            const info = await inspectImage(
+              await e.getData(new BlobWriter(), { checkSignature: true }),
+            );
+            await put(
+              "files",
+              existing.id + "/resource/" + match.asset.logical_path,
+              info.blob,
+            );
+            resolved.add(match.asset.logical_path);
+            report.matched++;
+            report.files.push({
+              path: e.filename,
+              status: "connected",
+              logical: match.asset.logical_path,
+              mime: info.mime,
+              width: info.width,
+              height: info.height,
+            });
+          } catch (error) {
+            report.invalid++;
+            report.files.push({
+              path: e.filename,
+              status: "invalid_format",
+              reason: error.message,
+            });
+          }
         }
-        progress(++i, entries.length);
+        progress(report.scanned, entries.length);
       }
-      existing.lastResourceImport = { matched, scanned: i };
+      existing.lastResourceImport = report;
+      await put("meta", "resource-report:" + existing.id, report);
       return existing;
     }
     if (manifests.length !== 1)
@@ -168,7 +215,11 @@ export async function importZip(file, progress, existing) {
     for (const e of entries) {
       if (!e.directory && e.filename.startsWith(prefix)) {
         const path = e.filename.slice(prefix.length);
-        if (/^(normalized\/|events\/|assets\/|manifest.json$)/.test(path))
+        if (
+          /^(normalized\/|events\/|assets\/|source_archive\/js\/plugins\/|manifest.json$)/.test(
+            path,
+          )
+        )
           await put(
             "files",
             id + "/" + path,

@@ -9,7 +9,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: StoryPlayer
@@ -34,6 +34,20 @@ jobs:
         run: node e2e/player.mjs
         env:
           PLAYER_EXE: release/win-unpacked/RPGStoryPlayer.exe
+      - name: Install web test browsers
+        run: npx playwright install chromium webkit
+      - name: Test static web build in Chromium and WebKit
+        shell: pwsh
+        run: |
+          $server = Start-Process python -ArgumentList '-m','http.server','5173','--bind','127.0.0.1','--directory','dist' -PassThru
+          try {
+            $env:PLAYER_BROWSER = 'chromium'
+            node e2e/player.mjs
+            if ($LASTEXITCODE -ne 0) { throw 'Chromium GUI failed' }
+            $env:PLAYER_BROWSER = 'webkit'
+            node e2e/player.mjs
+            if ($LASTEXITCODE -ne 0) { throw 'WebKit GUI failed' }
+          } finally { Stop-Process -Id $server.Id -ErrorAction SilentlyContinue }
       - name: Verify portable launcher has no console
         run: ./scripts/verify-portable.ps1
       - uses: actions/upload-artifact@v4
@@ -41,7 +55,16 @@ jobs:
           name: RPGStoryPlayer-Windows
           path: StoryPlayer/release/*.exe
       - uses: actions/upload-artifact@v4
+        with:
+          name: StoryPlayer-Web-0.2.0
+          path: StoryPlayer/dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StoryPlayer-Samples-0.2.0
+          path: StoryPlayer/fixtures/*.zip
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: StoryPlayer-Test-Evidence
           path: StoryPlayer/reports/
+

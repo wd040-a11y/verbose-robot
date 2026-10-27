@@ -1,6 +1,26 @@
+import {
+  migrateState,
+  character,
+  direction,
+  gameData,
+  randomInt,
+  known,
+} from "./state.js";
+import { applyRoute } from "./routes.js";
+import { PluginRegistry } from "./plugins/registry.js";
+export { migrateState, seedMap } from "./state.js";
 export const clone = (x) => structuredClone(x);
 export function initial(system = {}) {
-  return {
+  return migrateState({
+    player: {
+      x: system.startX || 0,
+      y: system.startY || 0,
+      direction: 2,
+      directionKnown: true,
+      positionKnown: true,
+      transparent: !!system.optTransparent,
+    },
+    timer: { working: false, frames: 0, known: true },
     switches: {},
     variables: {},
     self: {},
@@ -13,7 +33,7 @@ export function initial(system = {}) {
     x: system.startX || 0,
     y: system.startY || 0,
     pictures: {},
-  };
+  });
 }
 const value = (s, id) => s.variables[id] ?? 0;
 const key = (ctx, ch) => `${ctx.map}:${ctx.event}:${ch}`;
@@ -66,16 +86,42 @@ export function condition(p, s, ctx) {
     }
     case 2:
       return !!s.self[key(ctx, a)] === (b === 0);
-    case 4:
+    case 3:
+      if (!s.timer?.working) return false;
+      if (!s.timer.known)
+        throw new Unsupported("타이머 실제 경과 시간이 미확정입니다");
+      return b === 0
+        ? Math.floor(s.timer.frames / 60) >= a
+        : Math.floor(s.timer.frames / 60) <= a;
+    case 4: {
       if (b === 0) return s.party.includes(a);
-      throw new Unsupported("캐릭터 상세 조건");
+      const actor = s.actors?.[a];
+      if (!actor) throw new Unsupported("액터 상세 상태 미등록");
+      if (b === 1) return known(actor, "name") === c;
+      if (b === 2) return known(actor, "classId") === c;
+      const key = { 3: "skills", 4: "weapons", 5: "armors", 6: "states" }[b];
+      if (!key) throw new Unsupported("액터 조건 형식 미지원");
+      return known(actor, key).includes(c);
+    }
+    case 6:
+      return direction(character(s, a, ctx)) === b;
     case 7:
       return b === 0 ? s.gold >= a : b === 1 ? s.gold <= a : s.gold < a;
     case 8:
       return (s.items[a] || 0) > 0;
     case 9:
     case 10:
-      if (b) throw new Unsupported("장착 장비 포함 조건");
+      if (b) {
+        if (((type === 9 ? s.weapons : s.armors)[a] || 0) > 0) return true;
+        let unknown = false;
+        for (const id of s.party) {
+          const equipped = s.actors?.[id]?.[type === 9 ? "weapons" : "armors"];
+          if (!equipped) unknown = true;
+          else if (equipped.includes(a)) return true;
+        }
+        if (unknown) throw new Unsupported("파티원의 장착 상태 미확정");
+        return false;
+      }
       return ((type === 9 ? s.weapons : s.armors)[a] || 0) > 0;
     default:
       throw new Unsupported(`조건 유형 ${type}: 정확한 호환 처리 필요`);
@@ -87,11 +133,20 @@ const visual = new Set([
   244, 245, 246, 249, 250, 251, 261,
 ]);
 export class Interpreter {
-  constructor({ page, state, context, engine, common }) {
-    this.state = clone(state);
+  constructor({
+    page,
+    state,
+    context,
+    engine,
+    common,
+    plugins = new PluginRegistry(),
+  }) {
+    this.state = migrateState(clone(state));
     this.before = clone(state);
     this.engine = engine;
     this.common = common;
+    this.plugins = plugins;
+    this.fidelity = [];
     this.stack = [
       { commands: page.commands, pc: 0, ctx: context, branches: {} },
     ];
@@ -100,8 +155,28 @@ export class Interpreter {
     this.done = false;
     this.steps = 0;
   }
+  note(entry) {
+    this.log.push(entry);
+    if (
+      [
+        "simplification",
+        "state_with_simplified_visual",
+        "presentation_only",
+      ].includes(entry.kind)
+    )
+      this.fidelity.push(entry);
+  }
   fail(message, c) {
-    this.wait = { type: "blocked", message, command: c?.id, raw: c?.raw };
+    this.wait = {
+      type: "blocked",
+      message,
+      command: c?.id,
+      raw: c?.raw,
+      context: this.stack.at(-1)?.ctx,
+      changes: Object.keys(this.state).filter(
+        (k) => JSON.stringify(this.state[k]) !== JSON.stringify(this.before[k]),
+      ),
+    };
     this.log.push(this.wait);
     return this.wait;
   }
@@ -152,10 +227,17 @@ export class Interpreter {
         p = r.parameters || [],
         d = r.indent;
       const s = this.state;
-      this.log.push({ command: command.id, code: r.code });
+      this.log.push({
+        command: command.id,
+        code: r.code,
+        category: commandCategory(r.code),
+        context: f.ctx,
+      });
       try {
         if (visual.has(r.code)) {
           this.log.at(-1).skipped = "presentation_only";
+          this.note({ kind: "presentation_only", code: r.code });
+          if (s.timer.working) s.timer.known = false;
           continue;
         }
         switch (r.code) {
@@ -163,6 +245,7 @@ export class Interpreter {
             break;
           case 101:
           case 105: {
+            if (s.timer.working) s.timer.known = false;
             let lines = [];
             const cont = r.code === 101 ? 401 : 405;
             while (f.commands[f.pc]?.raw.code === cont)
@@ -181,6 +264,7 @@ export class Interpreter {
             this.wait = { type: "text", text: p[0] };
             return this.wait;
           case 102: {
+            if (s.timer.working) s.timer.known = false;
             let cancel;
             if (this.engine === "VXACE")
               cancel =
@@ -235,6 +319,9 @@ export class Interpreter {
             let operand;
             if (p[3] === 0) operand = p[4];
             else if (p[3] === 1) operand = value(s, p[4]);
+            else if (p[3] === 2)
+              operand = randomInt(s, p[4], p[5], (e) => this.note(e));
+            else if (p[3] === 3) operand = gameData(p.slice(4), s, f.ctx);
             else
               throw new Unsupported(
                 "변수 피연산자: 난수·게임 데이터·스크립트 호환 처리 필요",
@@ -243,6 +330,8 @@ export class Interpreter {
               throw new Unsupported("숫자가 아닌 변수");
             const changes = {};
             for (let id = p[0]; id <= p[1]; id++) {
+              if (p[3] === 2 && id > p[0] && this.engine !== "VXACE")
+                operand = randomInt(s, p[4], p[5], (e) => this.note(e));
               let x = value(s, id),
                 v;
               switch (p[2]) {
@@ -276,6 +365,55 @@ export class Interpreter {
               changes[id] = this.engine === "VXACE" ? v : Math.floor(v);
             }
             Object.assign(s.variables, changes);
+            break;
+          }
+          case 124:
+            if (p[0] === 0)
+              s.timer = { working: true, frames: p[1] * 60, known: true };
+            else s.timer.working = false;
+            break;
+          case 205:
+            applyRoute(s, p[0], p[1], f.ctx, (e) => this.note(e));
+            break;
+          case 505:
+            this.note({
+              kind: "continuation_metadata",
+              reason: "205.list에 포함된 경로 표시 데이터. 중복 실행하지 않음",
+            });
+            break;
+          case 211:
+            s.player.transparent = p[0] === 0;
+            this.note({ kind: "state_with_simplified_visual", code: 211 });
+            break;
+          case 322:
+            s.actorGraphics[p[0]] = {
+              characterName: p[1],
+              characterIndex: p[2],
+              faceName: p[3],
+              faceIndex: p[4],
+              ...(this.engine === "VXACE" ? {} : { battlerName: p[5] }),
+            };
+            if (s.party[0] === p[0])
+              Object.assign(s.player, {
+                characterName: p[1],
+                characterIndex: p[2],
+              });
+            this.note({ kind: "state_with_simplified_visual", code: 322 });
+            break;
+          case 356:
+          case 357: {
+            const result = this.plugins.execute(
+              this.engine,
+              r.code,
+              p,
+              s,
+              f.ctx,
+              (e) => this.note(e),
+            );
+            if (result) {
+              this.wait = result;
+              return result;
+            }
             break;
           }
           case 123:
@@ -382,6 +520,12 @@ export class Interpreter {
             s.map = p[0] === 0 ? p[1] : value(s, p[1]);
             s.x = p[0] === 0 ? p[2] : value(s, p[2]);
             s.y = p[0] === 0 ? p[3] : value(s, p[3]);
+            Object.assign(s.player, { x: s.x, y: s.y, positionKnown: true });
+            if (p[4])
+              Object.assign(s.player, {
+                direction: p[4],
+                directionKnown: true,
+              });
             return (this.wait = { type: "transfer", map: s.map });
           case 231:
             s.pictures[p[0]] = {
@@ -396,6 +540,10 @@ export class Interpreter {
             };
             break;
           case 232:
+            this.note({
+              kind: "state_with_simplified_visual",
+              reason: "그림 이동의 정적 최종 상태; 이동 시간/이징 생략",
+            });
             if (s.pictures[p[0]])
               Object.assign(s.pictures[p[0]], {
                 origin: p[2],
@@ -425,4 +573,18 @@ export class Interpreter {
     this.wait = null;
     return this.state;
   }
+}
+
+const exact = new Set([
+  0, 101, 401, 105, 405, 102, 402, 403, 404, 111, 411, 412, 121, 122, 123, 124,
+  117, 115, 112, 113, 413, 118, 119, 125, 126, 127, 128, 129, 201,
+]);
+export function commandCategory(code) {
+  return visual.has(code)
+    ? "B"
+    : exact.has(code)
+      ? "A"
+      : [205, 211, 322, 231, 232, 235, 505].includes(code)
+        ? "C"
+        : "D";
 }

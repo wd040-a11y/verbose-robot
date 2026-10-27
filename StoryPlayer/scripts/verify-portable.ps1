@@ -19,3 +19,4 @@ $window.CloseMainWindow() | Out-Null
 Start-Sleep -Seconds 2
 if (!$window.HasExited) { Stop-Process -Id $window.Id -ErrorAction SilentlyContinue }
 Write-Output 'Portable EXE GUI launch and Windows GUI subsystem PASS'
+

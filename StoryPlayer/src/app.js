@@ -1,3 +1,5 @@
+import { migrateState, seedMap } from "./state.js";
+import { SceneRenderer, loadImage } from "./rendering.js";
 import "./style.css";
 import { Package, importZip, library, get, put } from "./storage.js";
 import { initial, clone, selectPage, pageStatus, Interpreter } from "./core.js";
@@ -10,7 +12,10 @@ let pkg,
   runner,
   temporary = false,
   baseline,
-  urls = [];
+  urls = [],
+  lastMessage = null,
+  currentEventName = "",
+  registry;
 function node(tag, text, parent = root) {
   const e = document.createElement(tag);
   if (text !== undefined) e.textContent = text;
@@ -28,13 +33,13 @@ function button(text, fn, parent = root) {
   };
   return b;
 }
-node("h1", "RPG Story Player");
+node("h1", "RPG Story Player 0.2.0");
 node("p", "로컬 이벤트 재생 · 게임 데이터는 서버로 전송하지 않습니다.");
 const top = node("section"),
   status = node("p", "추출 ZIP을 불러오세요.");
 const input = node("input", undefined, top);
 input.type = "file";
-input.accept = ".zip";
+input.accept = ".zip,application/zip,application/x-zip-compressed";
 input.setAttribute("aria-label", "추출 패키지 ZIP");
 const select = node("select", undefined, top);
 select.setAttribute("aria-label", "게임 선택");
@@ -43,8 +48,10 @@ select.onchange = () =>
 button("리소스 ZIP 추가", () => resource.click(), top);
 const resource = node("input", undefined, top);
 resource.type = "file";
-resource.accept = ".zip";
+resource.accept = ".zip,application/zip,application/x-zip-compressed";
 resource.hidden = true;
+const nav = node("nav");
+nav.setAttribute("aria-label", "화면 이동");
 const grid = node("main"),
   left = node("section", undefined, grid),
   middle = node("section", undefined, grid),
@@ -56,11 +63,52 @@ const mapList = node("div", undefined, left);
 node("h2", "이벤트", middle);
 const eventList = node("div", undefined, middle);
 node("h2", "재생", right);
+const eventTitle = node("h3", "이벤트를 선택하세요", right);
+right.className = "player-panel";
 const scene = node("div", undefined, right),
   dialog = node("div", "", right),
   controls = node("div", undefined, right);
+scene.setAttribute("aria-label", "CG 표시 영역");
+const face = node("div", undefined, right);
+face.className = "face";
+right.insertBefore(face, dialog);
+dialog.className = "dialogue";
+controls.className = "play-controls";
+const renderer = new SceneRenderer(scene, face);
 const tools = node("section");
 node("h2", "상태와 기록", tools);
+const gallery = node("section");
+node("h2", "이미지 연결 / 미리보기", gallery);
+const resourceSummary = node(
+  "p",
+  "리소스 ZIP을 추가하면 연결 결과를 확인할 수 있습니다.",
+  gallery,
+);
+const resourceDetails = node("details", undefined, gallery);
+node("summary", "파일별 연결 결과", resourceDetails);
+const resourceReport = node("pre", "", resourceDetails);
+const imageSearch = node("input", undefined, gallery);
+imageSearch.placeholder = "이미지 이름 / 경로 검색";
+const imageList = node("div", undefined, gallery),
+  imagePreview = node("div", undefined, gallery);
+imagePreview.className = "image-preview";
+imageSearch.oninput = () => renderGallery();
+for (const [label, target] of [
+  ["장소", left],
+  ["이벤트", middle],
+  ["재생", right],
+  ["이미지", gallery],
+  ["상태", tools],
+])
+  button(
+    label,
+    () => target.scrollIntoView({ behavior: "smooth", block: "start" }),
+    nav,
+  );
+const actorPanel = node("details", undefined, tools);
+node("summary", "변경된 액터 그래픽", actorPanel);
+const actorList = node("div", undefined, actorPanel);
+
 const type = node("select", undefined, tools);
 for (const v of ["switches", "variables", "self", "items", "party"]) {
   const o = node(
@@ -105,10 +153,11 @@ button(
     if (v) {
       runner = null;
       temporary = false;
-      state = clone(v.state);
+      state = migrateState(clone(v.state));
       await save();
       await showEvents();
       renderState();
+      await resetPresentation();
       dialog.textContent = "세계 상태 복원 완료";
     }
   },
@@ -124,6 +173,7 @@ button(
       await save();
       renderState();
       await showEvents();
+      await resetPresentation();
       dialog.textContent = "실행 전 상태를 복원했습니다.";
     }
   },
@@ -133,6 +183,7 @@ button(
   "현재 실행 중단",
   async () => {
     runner = null;
+    controls.replaceChildren();
     dialog.textContent =
       "중단됨. 이미 적용한 상태는 되돌리기로 복원할 수 있습니다.";
   },
@@ -187,14 +238,26 @@ async function load(id) {
   eventList.replaceChildren();
   dialog.textContent = "맵과 이벤트를 선택하세요.";
   controls.replaceChildren();
-  scene.replaceChildren();
+  renderer.layer.replaceChildren();
+  face.replaceChildren();
+  lastMessage = null;
   maps = await pkg.json("normalized/maps.json");
   const game = await pkg.json("normalized/game.json");
-  state = (await get("meta", "state:" + id)) || initial(game.system);
+  state = migrateState(
+    (await get("meta", "state:" + id)) || initial(game.system),
+  );
+  registry = await pkg.plugins();
+  const screen = game.system.advanced || {};
+  renderer.setSize(
+    screen.screenWidth || (pkg.manifest.engine === "VXACE" ? 544 : 816),
+    screen.screenHeight || (pkg.manifest.engine === "VXACE" ? 416 : 624),
+  );
   pkg.assets = await pkg.json("normalized/assets.json");
   pkg.commons = await pkg.json("normalized/common_events.json");
   renderMaps();
   renderState();
+  await renderGallery();
+  await showResourceReport();
   await refreshSnapshots();
   status.textContent = `${m.title} · ${m.manifest.engine} · 맵 ${maps.length} · 이벤트 ${m.events} · 이미지는 선택 사항`;
 }
@@ -254,10 +317,13 @@ async function showEvents() {
 }
 async function start(e, i, force, ctx) {
   baseline = clone(state);
+  currentEventName = `${e.raw_metadata.name || e.id} · 페이지 ${i + 1}`;
+  eventTitle.textContent = currentEventName;
   temporary = force;
   runner = new Interpreter({
     page: e.pages[i],
-    state,
+    state: seededState(e, i, ctx),
+    plugins: registry,
     context: ctx,
     engine: pkg.manifest.engine,
     common: async (id) => {
@@ -280,6 +346,14 @@ async function advance(answer) {
   status.textContent = temporary
     ? "임시 감상 — 기본 세계 상태 유지"
     : "일반 진행 — 변경 상태 자동 저장";
+  dialog.className =
+    w.type === "blocked"
+      ? "dialogue blocked"
+      : w.type === "choice"
+        ? "dialogue choice-prompt"
+        : "dialogue";
+  lastMessage = w.type === "text" ? w : null;
+  await renderer.portrait(pkg, lastMessage);
   if (w.type === "text") {
     dialog.textContent =
       (w.speaker ? w.speaker + "\n" : "") +
@@ -296,7 +370,25 @@ async function advance(answer) {
     if (w.cancel.mode !== "disabled")
       button("취소 선택", () => advance("cancel"), controls);
   } else if (w.type === "blocked") {
-    dialog.textContent = `이 이벤트 실행 중단\n${w.message}\n명령: ${w.command}\n다른 이벤트는 계속 선택할 수 있습니다.`;
+    dialog.textContent = `이 이벤트 실행 중단\n${currentEventName}\n${w.message}\n다른 이벤트는 계속 선택할 수 있습니다.`;
+    const details = node("details", undefined, dialog);
+    node("summary", "명령 위치와 상태 변경 상세", details);
+    node(
+      "pre",
+      JSON.stringify(
+        {
+          command: w.command,
+          raw: w.raw,
+          context: w.context,
+          changes: w.changes,
+          before: baseline,
+          after: active.state,
+        },
+        null,
+        2,
+      ),
+      details,
+    );
     button(
       "실행 전 상태 복원",
       async () => {
@@ -306,11 +398,17 @@ async function advance(answer) {
         await save();
         renderState();
         await showEvents();
+        await resetPresentation();
+        dialog.textContent = "실행 전 상태를 복원했습니다.";
       },
       controls,
     );
   } else if (w.type === "done") {
-    dialog.textContent = "이벤트 종료";
+    dialog.textContent = active.fidelity.some(
+      (x) => x.kind === "simplification",
+    )
+      ? "이벤트 종료 — 이동/시간 간소화 포함 (원작 결과 동일성 미검증)"
+      : "이벤트 종료";
     if (temporary)
       button(
         "감상 결과를 기본 세계에 반영",
@@ -332,27 +430,110 @@ async function advance(answer) {
     button("계속", () => advance(), controls);
   }
 }
+function seededState(event, index, ctx) {
+  const copy = migrateState(clone(state));
+  seedMap(copy, { events }, ctx.map, selectPage);
+  // Force viewing changes page graphics only in the isolated execution copy.
+  const c = copy.characters[`${ctx.map}:${ctx.event}`];
+  const image = event.pages[index].raw_metadata?.image;
+  if (c && image && c.page !== event.pages[index].id)
+    Object.assign(c, {
+      direction: image.direction ?? 2,
+      directionKnown: true,
+      characterName: image.characterName || "",
+      characterIndex: image.characterIndex || 0,
+    });
+  return copy;
+}
+async function resetPresentation() {
+  controls.replaceChildren();
+  lastMessage = null;
+  await renderer.portrait(pkg, null);
+  await pictures(state);
+}
 async function pictures(s) {
-  urls.forEach(URL.revokeObjectURL);
-  urls = [];
-  scene.replaceChildren();
-  for (const [id, p] of Object.entries(s.pictures).sort(
-    (a, b) => +a[0] - +b[0],
-  )) {
-    const b = await pkg.image("img/pictures/" + p.name);
-    if (b) {
-      const u = URL.createObjectURL(b);
-      urls.push(u);
-      const image = node("img", undefined, scene);
-      image.src = u;
-      image.alt = p.name;
-      image.style.opacity = p.opacity / 255;
-    } else
-      node(
-        "small",
-        `그림 ${id}: ${p.name} — 리소스 미등록 (이벤트 계속 실행)`,
-        scene,
-      );
+  await renderer.pictures(pkg, s);
+  renderActors(s);
+}
+function renderActors(s) {
+  actorList.replaceChildren();
+  for (const [id, g] of Object.entries(s.actorGraphics || {})) {
+    const row = node("div", undefined, actorList);
+    node(
+      "p",
+      `액터 ${id}: ${g.characterName} / 얼굴 ${g.faceName} [${g.faceIndex}]`,
+      row,
+    );
+    button("얼굴 미리보기", () => previewImage("img/faces/" + g.faceName), row);
+  }
+}
+async function showResourceReport() {
+  const r =
+    pkg.lastResourceImport || (await get("meta", "resource-report:" + pkg.id));
+  if (!r) {
+    resourceSummary.textContent =
+      "이미지는 선택 사항입니다. 연결된 이미지는 아래에서 미리 볼 수 있습니다.";
+    resourceReport.textContent = "";
+    return;
+  }
+  resourceSummary.textContent = `이미지 연결 결과 · 검사 ${r.scanned}개 · 정상 연결 ${r.matched}개 · 참조 대상 없음 ${r.noReference || 0}개 · 형식 오류 ${r.invalid || 0}개 · 모호/중복 ${r.ambiguous || 0}개`;
+  resourceReport.textContent = (r.files || [])
+    .map((x) => `${x.status} | ${x.path} | ${x.reason || x.logical || ""}`)
+    .join("\n");
+}
+let galleryRevision = 0;
+async function renderGallery() {
+  const rev = ++galleryRevision;
+  imageList.replaceChildren();
+  if (!pkg?.assets) return;
+  const found = pkg.assets.filter(
+    (a) =>
+      a.category === "images" &&
+      `${a.logical_path} ${a.source_path}`
+        .toLowerCase()
+        .includes(imageSearch.value.toLowerCase()),
+  );
+  node(
+    "small",
+    `${found.length}개 중 최대 60개 표시. 검색으로 범위를 좁힐 수 있습니다.`,
+    imageList,
+  );
+  for (const a of found.slice(0, 60)) {
+    const blob = await pkg.image(a.logical_path);
+    if (rev !== galleryRevision) return;
+    const row = node("div", undefined, imageList);
+    row.className = "image-row";
+    node("small", `${blob ? "연결됨" : "미등록"} · ${a.logical_path}`, row);
+    const details = node("details", undefined, row);
+    node("summary", "원본 참조 / 연결 이벤트", details);
+    node(
+      "pre",
+      JSON.stringify(
+        {
+          source: a.source_path,
+          output: a.output_path,
+          events: a.used_by || [],
+          references: a.reference_ids || [],
+        },
+        null,
+        2,
+      ),
+      details,
+    );
+    button("미리보기", () => previewImage(a.logical_path), row);
+  }
+}
+async function previewImage(logical) {
+  imagePreview.replaceChildren();
+  node("p", logical, imagePreview);
+  try {
+    const blob = await pkg.image(logical);
+    if (!blob) throw Error("연결된 이미지가 없습니다");
+    const img = await loadImage(blob);
+    img.alt = logical;
+    imagePreview.append(img);
+  } catch (e) {
+    node("p", e.message, imagePreview);
   }
 }
 async function renderState() {
@@ -410,6 +591,9 @@ resource.onchange = async () => {
       pkg,
     );
     await pictures(runner?.state || state);
+    await renderer.portrait(pkg, lastMessage);
+    await showResourceReport();
+    await renderGallery();
     status.textContent = `이미지 ${pkg.lastResourceImport.matched}개 연결 / 파일 ${pkg.lastResourceImport.scanned}개 검사`;
   } catch (e) {
     status.textContent = e.message;

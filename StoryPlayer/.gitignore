@@ -4,3 +4,5 @@ release/
 fixtures/
 tmp/
 browsers/
+
+public/build-info.json

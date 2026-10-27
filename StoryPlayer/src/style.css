@@ -101,6 +101,139 @@ main section:first-child button {
   }
 }
 
-* { box-sizing: border-box; }
-main, main section { min-width: 0; }
-input, select { max-width: 100%; }
+* {
+  box-sizing: border-box;
+}
+main,
+main section {
+  min-width: 0;
+}
+input,
+select {
+  max-width: 100%;
+}
+
+nav {
+  display: flex;
+  gap: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #10151e;
+  padding: 6px 0;
+}
+nav button {
+  flex: 1;
+  min-height: 44px;
+}
+section {
+  scroll-margin-top: 70px;
+}
+main {
+  grid-template-columns: minmax(160px, 0.65fr) minmax(240px, 1fr) minmax(
+      420px,
+      2fr
+    );
+}
+main .player-panel {
+  max-height: none;
+  overflow: visible;
+}
+.scene {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #080d15;
+  border: 1px solid #384863;
+  border-radius: 8px;
+}
+.picture-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: top left;
+}
+.picture {
+  position: absolute;
+  max-width: none;
+  max-height: none;
+}
+.missing-picture {
+  color: #ccd8eb;
+  border: 1px dashed #7992b4;
+  padding: 12px;
+  width: 260px;
+  min-height: 90px;
+  background: #243048cc;
+  font-size: 20px;
+}
+.face {
+  float: left;
+  margin: 14px 16px 10px 0;
+  max-width: 144px;
+}
+.face canvas {
+  width: 100%;
+  image-rendering: auto;
+  border-radius: 8px;
+}
+.dialogue {
+  min-height: 110px;
+  white-space: pre-wrap;
+  line-height: 1.8;
+  font-size: 18px;
+  margin: 14px 0;
+  overflow-wrap: anywhere;
+}
+.dialogue.blocked {
+  background: #45262d;
+  border-left: 4px solid #ef99a8;
+  padding: 14px;
+}
+.choice-prompt {
+  min-height: 30px;
+  color: #b9d2ff;
+}
+.play-controls {
+  clear: both;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.play-controls button {
+  flex: 1;
+  min-width: 100px;
+  min-height: 46px;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow: auto;
+}
+.image-row {
+  border-bottom: 1px solid #334158;
+  padding: 10px;
+}
+.image-preview img {
+  max-height: 600px;
+}
+#app > section:last-child {
+  clear: both;
+}
+@media (max-width: 1100px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+  main section {
+    max-height: none;
+  }
+  input,
+  select,
+  button {
+    font-size: 16px;
+  }
+  body {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+}
