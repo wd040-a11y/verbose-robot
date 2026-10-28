@@ -77,7 +77,8 @@ export class Package {
     const b = (await get("files", this.id + "/" + path)) || await lazyFile(this.id,path,32*1024**2);
     if (!b) throw Error(this.lazyArchive ? "지연 로딩 ZIP을 다시 선택해 주세요. 원본 ZIP은 저장소에 복사하지 않았습니다: "+path : "파일 누락: " + path);
     if (b.size > 32 * 1024 * 1024) throw Error("JSON 한도 32 MiB");
-    const v = JSON.parse(await b.text());
+    let v;
+    try { v = JSON.parse(await b.text()); } catch { throw Error("JSON 구문 오류: "+path+". 원본 추출 보고서를 확인하세요."); }
     if (!validate(v)) throw Error("패키지 스키마 검증 실패: " + path);
     if (
       v.package_id !== this.manifest.package_id ||
@@ -268,7 +269,7 @@ export async function importZip(file, progress, existing) {
       maps: maps.length,
       events: events.length,
     });
-    await put("meta", "places-v1:"+id, null);
+    await put("meta", "places-v2:"+id, null);
     await put("meta", id, meta);
     return new Package(meta);
   } finally {

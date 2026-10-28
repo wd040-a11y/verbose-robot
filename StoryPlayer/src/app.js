@@ -341,8 +341,8 @@ async function load(id) {
   c.registry = await c.pkg.plugins();
   c.pkg.assets = await c.pkg.json("normalized/assets.json");
   c.pkg.commons = await c.pkg.json("normalized/common_events.json");
-  c.placeIndex=(await get("meta","places-v1:"+id)) || await indexPlaces(c.pkg,c.maps,common,(n,total)=>c.status(`장소 콘텐츠 확인 ${n}/${total}`));
-  await put("meta","places-v1:"+id,c.placeIndex);
+  c.placeIndex=(await get("meta","places-v2:"+id)) || await indexPlaces(c.pkg,c.maps,common,(n,total)=>c.status(`장소 콘텐츠 확인 ${n}/${total}`));
+  await put("meta","places-v2:"+id,c.placeIndex);
   c.db = await actorDatabase(c.pkg);
   c.db.Items = await database(c.pkg, "Items");
   const s = c.game.system.advanced || {};
@@ -377,7 +377,7 @@ function renderMaps() {
   if(!rows.length&&c.maps.length)el('p','감상 콘텐츠가 확인된 장소가 없습니다. 전체 장소 또는 다른 검색어를 확인하세요.',mapList);
   for (const m of rows.slice(0,100)) {
     const b = button(
-      (c.text("map:" + m.map_id, m.name) || "이름 없는 장소")+` · ${c.placeIndex?.[m.map_id]?.count ?? "미확정"}장면`,
+      (c.text("map:" + m.map_id, m.name) || "이름 없는 장소")+` · ${c.placeIndex?.[m.map_id]?.count ?? "미확정"}장면${c.placeIndex?.[m.map_id]?.uncertain ? " · 분석 미확정" : ""}`,
       () => chooseMap(m),
       mapList,
     );

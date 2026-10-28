@@ -1,2 +1,4 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {indexPlaces} from '../src/exploration/places.js';
 test('empty places distinguish confirmed zero from unreadable and index dialogue across maps',async()=>{const pkg={json:async f=>{if(f==='bad')throw Error('missing');return {events:f==='empty'?[]:[{pages:[{commands:[{raw:{code:401,parameters:['찾을 대사']}}]}]}]};}};const r=await indexPlaces(pkg,[{map_id:1,file:'empty'},{map_id:2,file:'content'},{map_id:3,file:'bad'}],async()=>null);assert.equal(r[1].count,0);assert.equal(r[2].count,1);assert.ok(r[2].text.includes('찾을 대사'));assert.equal(r[3].count,null);assert.equal(r[3].uncertain,true);});
+
+test('plugin-only place remains uncertain rather than confirmed empty',async()=>{const r=await indexPlaces({json:async()=>({events:[{pages:[{commands:[{raw:{code:356,parameters:['CustomContent']}}]}]}]})},[{map_id:1,file:'map'}]);assert.equal(r[1].count,0);assert.equal(r[1].uncertain,true);});
