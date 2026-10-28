@@ -1,9 +1,30 @@
 // Presentation-only cursor. Never evaluates scripts or writes game switches.
 export class StoryCursor {
- constructor({page,state,context,common}){this.state=structuredClone(state);this.state.pictures={};this.state.storyStatic=true;this.stack=[this.frame(page,context)];this.common=common;this.wait=null;this.done=false;this.steps=0;this.log=[];this.fidelity=[];}
+ constructor({page,state,context,common,rawVisuals=false}){this.rawVisuals=rawVisuals;this.state=structuredClone(state);this.state.pictures={};this.state.storyStatic=true;this.stack=[this.frame(page,context)];this.common=common;this.wait=null;this.done=false;this.steps=0;this.log=[];this.fidelity=[];}
  frame(page,ctx){return {commands:page.commands||[],pc:0,ctx,branches:{}};}
  jump(f,codes,indent){for(;f.pc<f.commands.length;f.pc++){const r=f.commands[f.pc].raw;if(r.indent<indent||(r.indent===indent&&codes.includes(r.code)))return;}}
  async advance(answer){
+  if(this.rawVisuals)return this.advanceFrame(answer);
+  if(this.state.storyTailPresented){this.done=true;return {type:'done'};}
+  let lastPicture=null;
+  for(let i=0;i<2000;i++){
+   const w=await this.advanceFrame(answer);answer=undefined;
+   if(w.type==='visual'){
+    const pictures=structuredClone(this.state.pictures);
+    if(Object.keys(pictures).length)lastPicture=pictures;
+    this.log.push({type:'visual',command:w.command,action:w.action,pictures});
+    continue;
+   }
+   if(['text','choice','movie'].includes(w.type))this.state.storyHasContent=true;
+   if(w.type==='done'&&!this.state.storyHasContent&&lastPicture){
+    this.state.pictures=lastPicture;this.state.storyTailPresented=true;this.done=false;
+    return this.wait={type:'visual',action:'gallery',command:'cg-only'};
+   }
+   return w;
+  }
+  return {type:'yield'};
+ }
+ async advanceFrame(answer){
   if(this.done)return {type:'done'};
   if(this.wait?.type==='choice'){
    const w=this.wait;if(!Number.isInteger(answer)||answer<0||answer>=w.choices.length)return w;

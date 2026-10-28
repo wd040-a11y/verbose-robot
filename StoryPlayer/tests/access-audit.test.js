@@ -3,7 +3,7 @@ import {StoryCursor} from '../src/exploration/player.js';import {History} from '
 let id=0;const c=(code,parameters=[],indent=0)=>({id:'c'+(++id),raw:{code,parameters,indent}});
 test('show then erase has two presentation checkpoints and rewind restores CG',async()=>{
  const page={id:'p',commands:[c(231,[1,'cg',0,0,0,0,100,100,255,0]),c(235,[1])]};
- const h=new History(new StoryCursor({page,state:initial(),context:{},common:async()=>null}));
+ const h=new History(new StoryCursor({page,rawVisuals:true,state:initial(),context:{},common:async()=>null}));
  assert.equal((await h.next()).action,'show');assert.equal(h.runner.state.pictures[1].name,'cg');assert.equal((await h.next()).action,'erase');assert.deepEqual(h.runner.state.pictures,{});h.seek(0);assert.equal(h.runner.state.pictures[1].name,'cg');
 });
 test('audit explores both exclusive branches and separates missing media from unknown effects',async()=>{

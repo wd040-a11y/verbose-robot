@@ -244,7 +244,9 @@ header {
 .scene {
   position: relative;
   width: 100%;
-  height: 40%;
+  height: auto;
+  max-height: 42dvh;
+  flex: 0 1 auto;
   min-height: 100px;
   background: #0b1019;
   overflow: hidden;
@@ -557,3 +559,7 @@ section > input {
     font-size: 16px;
   }
 }
+
+button { touch-action: manipulation; }
+.focused-picture {width:100%;height:100%;object-fit:contain;display:block;}
+.cg-focus .picture-layer {position:relative;}

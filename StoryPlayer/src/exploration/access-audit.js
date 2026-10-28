@@ -8,7 +8,7 @@ export async function auditPage(page,{common=async()=>null,resource=async()=>({s
  }}
  await collect(page);
  const queue=[[]];const effects=new Map();
- while(queue.length&&paths<maxPaths){const path=queue.shift();const r=new StoryCursor({page,state:initial(),context:page.auditContext||{},common});let position=0,answer;
+ while(queue.length&&paths<maxPaths){const path=queue.shift();const r=new StoryCursor({page,rawVisuals:true,state:initial(),context:page.auditContext||{},common});let position=0,answer;
   for(let step=0;step<maxSteps;step++){
    const w=await r.advance(answer);answer=undefined;
    if(w.command)seen.add(w.command);for(const id of w.lineIds||[])seen.add(id);

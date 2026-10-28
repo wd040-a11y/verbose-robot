@@ -1,4 +1,5 @@
 import "./style.css";
+import {indexPlaces} from "./exploration/places.js";
 import {imageViewer,movieViewer} from "./ui/media.js";
 import { StoryCursor } from "./exploration/player.js";
 import { openStory, inspectPackage } from "./ui/story.js";
@@ -110,7 +111,9 @@ const explore = screens["감상"],
 const timeline = select(filters, "시점과 엔딩", [
   ["all", "모든 시점 · 분석 전"],
 ]);
-const globalSearch = input(filters, "장소 / 인물 / 장면 검색");
+const globalSearch = input(filters, "게임 전체 장소 / 인물 / 대사 검색");
+const placeFilter=select(filters,"장소 표시",[["content","감상 가능한 장소"],["all","전체 장소"]]);
+placeFilter.onchange=()=>renderMaps();
 const mobileNav = el("div", null, explore, "mobile-nav");
 for (const v of ["장소", "장면", "재생"])
   button(v, () => setMobile(v), mobileNav);
@@ -183,8 +186,11 @@ button(
   () => showStatic(),
   playbackOptions,
 );
+button("지나간 CG 기록",()=>{if(!c.session)return;const d=modal("CG 감상 기록");for(const frame of c.session.history.runner.log.filter(x=>x.type==="visual"&&Object.keys(x.pictures).length))button("CG 열기",()=>imageViewer(c.pkg,frame.pictures),d);},playbackOptions);
 button("CG 전체 보기",()=>c.session && imageViewer(c.pkg,c.session.history.runner.state.pictures),playbackOptions);
 button("현재 동영상 열기",()=>c.session?.history.runner.state.storyMovie && movieViewer(c.pkg,c.session.history.runner.state.storyMovie),playbackOptions);
+const pictureMode=select(playbackOptions,"CG 표시",[["auto","자동 맞춤"],["original","원본 장면"],["focus","CG 집중"]]);
+pictureMode.onchange=()=>{renderer.mode=pictureMode.value;renderSession(true);};
 const diagnostics = el("div", null, playbackOptions);
 const renderer = new SceneRenderer(scene, face),
   textPlayer = new Dialogue(dialogue, effectNotice);
@@ -334,6 +340,8 @@ async function load(id) {
   c.registry = await c.pkg.plugins();
   c.pkg.assets = await c.pkg.json("normalized/assets.json");
   c.pkg.commons = await c.pkg.json("normalized/common_events.json");
+  c.placeIndex=(await get("meta","places-v1:"+id)) || await indexPlaces(c.pkg,c.maps,common,(n,total)=>c.status(`장소 콘텐츠 확인 ${n}/${total}`));
+  await put("meta","places-v1:"+id,c.placeIndex);
   c.db = await actorDatabase(c.pkg);
   c.db.Items = await database(c.pkg, "Items");
   const s = c.game.system.advanced || {};
@@ -363,19 +371,19 @@ async function clearPlayer() {
 }
 function renderMaps() {
   mapList.replaceChildren();
-  for (const m of c.maps.filter((m) =>
-    `${m.name} ${c.text("map:" + m.map_id, m.name)}`
-      .toLowerCase()
-      .includes(globalSearch.value.toLowerCase()),
-  )) {
+  const query=globalSearch.value.toLowerCase();
+  const rows=c.maps.filter(m=>{const info=c.placeIndex?.[m.map_id];return (placeFilter.value==='all'||!info||info.uncertain||info.count>0)&&(!query||(info?.text||m.name||'').includes(query));});
+  if(!rows.length&&c.maps.length)el('p','감상 콘텐츠가 확인된 장소가 없습니다. 전체 장소 또는 다른 검색어를 확인하세요.',mapList);
+  for (const m of rows.slice(0,100)) {
     const b = button(
-      c.text("map:" + m.map_id, m.name) || "이름 없는 장소",
+      (c.text("map:" + m.map_id, m.name) || "이름 없는 장소")+` · ${c.placeIndex?.[m.map_id]?.count ?? "미확정"}장면`,
       () => chooseMap(m),
       mapList,
     );
     b.classList.toggle("selected", m === c.currentMap);
     b.dataset.mapId = m.map_id;
   }
+  if(rows.length>100)el("p","검색으로 장소를 좁혀 주세요. 처음 100개를 표시합니다.",mapList);
   if (!c.maps.length) el("p", "게임을 먼저 선택하세요.", mapList);
 }
 async function common(id) {
@@ -418,6 +426,7 @@ async function renderEvents() {
   );
   if (eventFilter.value === "content")
     rows = rows.filter((e) => c.infos.get(e.id)?.content);
+  if(!rows.length)el("p","이 장소에 검색 조건과 맞는 장면이 없습니다. 검색어를 지우거나 전체 이벤트를 확인하세요.",eventList);
   if (eventFilter.value === "system")
     rows = rows.filter((e) => !c.infos.get(e.id)?.content);
   paginate(
@@ -648,7 +657,7 @@ async function renderSession(instant = false) {
     if (w.cancel.mode !== "disabled")
       button("선택 취소", () => advance("cancel"), choices);
   } else if (w.type === "visual") {
-    dialogue.textContent = ({show:"그림 표시",move:"그림 변경",erase:"그림 삭제"})[w.action]+" · 다음으로 계속 감상하세요.";
+    dialogue.textContent = w.action==="gallery"?"CG 장면":"장면";
   } else if (w.type === "movie") {
     dialogue.textContent="동영상 장면 · "+w.name;
     button("동영상 재생",()=>movieViewer(c.pkg,w.name),choices);

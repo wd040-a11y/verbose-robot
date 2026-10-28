@@ -25,7 +25,7 @@ test("image-less package imports, resources attach by original logical path", as
     p,
   );
   assert.ok((await p.image("img/pictures/scene")).size > 0);
-  assert.equal((await p.json("normalized/maps.json")).length, 2);
+  assert.equal((await p.json("normalized/maps.json")).length, 3);
 });
 
 test("resource import reports success, missing references and corrupt images independently", async () => {

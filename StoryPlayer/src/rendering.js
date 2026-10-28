@@ -33,11 +33,17 @@ export class SceneRenderer {
     this.resize();
   }
   resize() {
+    if(this.focused)return;
     this.layer.style.transform = `scale(${Math.min(this.scene.clientWidth / this.width, this.scene.clientHeight / this.height)})`;
   }
   async pictures(pkg, s) {
     const generation = ++this.generation;
     this.layer.replaceChildren();
+    this.focused=(this.mode||'auto')!=='original'&&Object.keys(s.pictures).length===1;
+    this.scene.classList.toggle('cg-focus',this.focused);
+    this.layer.style.width=this.focused?'100%':this.width+'px';
+    this.layer.style.height=this.focused?'100%':this.height+'px';
+    if(this.focused)this.layer.style.transform='none';else this.resize();
     for (const [id, p] of Object.entries(s.pictures).sort(
       (a, b) => +a[0] - +b[0],
     )) {
@@ -55,7 +61,8 @@ export class SceneRenderer {
       if (image) e.alt = p.name;
       else
         e.textContent = `그림 ${id}: ${p.name} — 리소스 미등록 (이벤트 계속 실행)`;
-      Object.assign(e.style, pictureStyle(p));
+      if(this.focused&&image){e.className="focused-picture";this.scene.style.aspectRatio=`${image.naturalWidth}/${image.naturalHeight}`;}
+      else {Object.assign(e.style,pictureStyle(p));this.scene.style.aspectRatio=`${this.width}/${this.height}`;}
       e.style.zIndex = id;
       this.layer.append(e);
     }

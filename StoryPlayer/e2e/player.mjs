@@ -19,6 +19,7 @@ async function advanceToGreeting(){
 
 try{
  await page.locator('input[type=file]').first().setInputFiles(path.resolve('fixtures/sample.zip'));
+ await expect(page.getByRole('button',{name:/빈 장소/})).toHaveCount(0);
  await page.getByRole('button',{name:/시작 마을/}).click();
  const npc=page.locator('article').filter({hasText:'안내 NPC'});
  await npc.getByRole('button',{name:'감상하기',exact:true}).click();
@@ -51,7 +52,7 @@ try{
  await cgOnly.getByRole('button',{name:'감상하기',exact:true}).click();
  await expect(page.locator('.picture-layer img')).toHaveCount(1);
  await page.getByRole('button',{name:'다음',exact:true}).click();
- await expect(page.locator('.picture-layer img')).toHaveCount(0);
+ await expect(page.getByText(/장면 감상 완료/)).toBeVisible();
  await page.getByRole('button',{name:'이전',exact:true}).click();
  await expect(page.locator('.picture-layer img')).toHaveCount(1);
  const movieEvent=page.locator('article').filter({hasText:'영상 검증'});
