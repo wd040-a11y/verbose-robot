@@ -1017,6 +1017,8 @@ gameFile.onchange = async () => {
         ? "저장 공간이 부족합니다. 브라우저 공간을 확인하고 작은 리소스 묶음부터 추가하세요."
         : e.message,
     );
+  } finally {
+    gameFile.value = "";
   }
 };
 games.onchange = () => load(games.value).catch((e) => c.error(e.message));
