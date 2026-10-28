@@ -13,6 +13,7 @@ def main(argv=None):
     sub=parser.add_subparsers(dest="action",required=True)
     scan=sub.add_parser("scan",help="게임 데이터 루트 찾기"); scan.add_argument("folder",type=Path)
     export=sub.add_parser("extract",help="데이터 추출"); export.add_argument("folder",type=Path); export.add_argument("output",type=Path,nargs="?")
+    export.add_argument("--mode",choices=("story","full"),default="story",help="기본은 스토리 감상용")
     export.add_argument("--root",type=Path,help="여러 게임이 있을 때 scan 결과의 root 선택")
     export.add_argument("--game-id",help="재추출 시 유지할 패키지 ID")
     for name,help_text in [("no-raw","원본 JSON 보관 생략"),("no-scripts","JavaScript 소스 보관 생략"),("no-images","이미지 복사 생략"),("no-decrypt","복호화 생략"),("audio","오디오 포함"),("movies","영상 포함"),("no-llm","LLM 입력 생략"),("no-tiles","정규화 파일에서 타일 배열 생략"),("sensitive-system","키를 포함한 System.json 원본도 별도 보관")]:
@@ -34,9 +35,9 @@ def main(argv=None):
             matches=[c for c in discover(args.folder) if c.root==args.root.absolute()]
             if len(matches)!=1: raise ValueError("--root가 scan 결과의 고유한 루트와 일치하지 않습니다.")
             candidate=matches[0]
-        options=Options(raw_json=not args.no_raw,plugin_sources=not args.no_scripts,images=not args.no_images,decrypt=not args.no_decrypt,
-                        audio=args.audio,movies=args.movies,llm=not args.no_llm,keep_tiles=not args.no_tiles,
-                        sensitive_system=args.sensitive_system,game_id=args.game_id)
+        options=Options(raw_json=args.mode=="full" and not args.no_raw,plugin_sources=args.mode=="full" and not args.no_scripts,images=not args.no_images,decrypt=not args.no_decrypt,
+                        audio=args.audio,movies=args.movies,llm=args.mode=="full" and not args.no_llm,keep_tiles=not args.no_tiles,
+                        sensitive_system=args.sensitive_system,game_id=args.game_id,detailed_reports=args.mode=="full",story_zip=True)
         def progress(stage,current,total,errors):
             if current % 50==0 or current==total: print(f"[{current}/{total}] {stage} (오류 {errors})",file=sys.stderr)
         result=Extractor(options,progress).run(args.folder,args.output,candidate)
@@ -48,3 +49,4 @@ def main(argv=None):
         print("중단되었습니다. 새 출력 폴더에서 다시 실행하세요.",file=sys.stderr); return 130
 
 if __name__=="__main__": raise SystemExit(main())
+

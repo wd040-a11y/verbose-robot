@@ -39,6 +39,10 @@ def main(config_path,report_path):
             package=load_json(window.last_output/'report.json')['data']
             assert package['schema_valid'] and package['output_counts']['maps']>=1
             assert window.open.isEnabled()
+            assert (window.last_output/'Story.zip').is_file()
+            assert not window.checks['llm'].isChecked()
+            assert not window.checks['raw_json'].isChecked()
+            assert '출력 검증' in window.log.toPlainText()
             report_path.parent.mkdir(parents=True,exist_ok=True)
             image=report_path.parent/(case['engine']+'-gui.png'); assert window.grab().save(str(image))
             opened=window.open_output() if config.get('open_folder') else None
@@ -54,3 +58,4 @@ def main(config_path,report_path):
     finally:
         write_json(report_path,result)
     return 0 if result['success'] else 1
+

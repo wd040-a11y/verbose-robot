@@ -56,7 +56,9 @@
         "unsupported",
         "opaque",
         "integrity",
-        "validation"
+        "validation",
+        "performance",
+        "resource_diagnostics"
       ]
     },
     "data": {}
@@ -2075,6 +2077,74 @@
               "valid",
               "errors"
             ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "performance"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "total_seconds": {
+                "type": "number"
+              },
+              "peak_rss_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "stages": {
+                "type": "object"
+              },
+              "timing_policy": {
+                "type": "string"
+              },
+              "validation": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": {
+            "const": "resource_diagnostics"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "groups": {
+                "type": "object"
+              },
+              "references": {
+                "type": "array"
+              },
+              "categories": {
+                "type": "object"
+              },
+              "retry_policy": {
+                "type": "string"
+              }
+            },
             "additionalProperties": false
           }
         }

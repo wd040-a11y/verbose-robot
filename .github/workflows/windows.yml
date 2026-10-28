@@ -18,6 +18,12 @@ jobs:
       - run: python -m pytest -q --junitxml=build/windows-evidence/tests.xml
         env:
           QT_QPA_PLATFORM: offscreen
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --prefix StoryPlayer
+      - run: python -m tools.prepare_story_compat
+      - run: node StoryPlayer/scripts/check-story-package.mjs
       - run: python -m PyInstaller --noconfirm --clean --windowed --onedir --name RPGMakerExtractor --paths src --collect-data rpgextractor --hidden-import PySide6.QtTest launch_gui.py
       - run: python -m tools.prepare_smoke
       - run: python tools/verify_windows.py
@@ -37,3 +43,4 @@ jobs:
         with:
           name: Windows-validation-evidence
           path: build/windows-evidence
+

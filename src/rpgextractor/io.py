@@ -86,11 +86,14 @@ def copy_stream(source: Path, target: Path, cancel: Callable = lambda: None):
     reject_links(source)
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(target.name + ".tmp")
+    h=hashlib.sha256()
     try:
         with source.open("rb") as src, temp.open("wb") as dst:
             while block := src.read(1024 * 1024):
                 cancel()
-                dst.write(block)
+                dst.write(block); h.update(block)
         os.replace(temp, target)
+        return h.hexdigest()
     finally:
         temp.unlink(missing_ok=True)
+

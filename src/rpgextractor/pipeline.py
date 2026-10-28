@@ -9,11 +9,13 @@ import re
 import shutil
 from . import SCHEMA_VERSION, __version__
 from .io import Cancelled, UnsafePath, inside, safe_files, reject_links, load_json, write_json, copy_stream, digest
-from .discovery import discover, Candidate
+from .discovery import discover, Candidate, preferred
 from .commands import analyze_commands, scan_route
 from .plugins import parse_plugins
-from .assets import process_asset
-from .validation import validate_package
+from .assets import process_asset, ERROR_HINTS
+from .validation import validate_package, validate_value
+from .metrics import Metrics
+from .packaging import story_package
 from .adapters import adapter_for
 from .output import allocate, MARKER
 import tempfile
@@ -31,6 +33,11 @@ class Options:
     keep_tiles: bool = True
     sensitive_system: bool = False
     game_id: str | None = None
+    story_zip: bool = False
+
+    @classmethod
+    def story(cls):
+        return cls(raw_json=False,plugin_sources=False,llm=False,detailed_reports=False,story_zip=True)
 
 COUNT_KEYS=("maps","events","pages","commands","common_events","troops","dialogue_commands","choice_commands")
 
@@ -72,13 +79,14 @@ def rebuild_event(record):
 class Extractor:
     def __init__(self, options=None, progress=None, cancelled=None):
         self.options=options or Options()
+        self.metrics=Metrics()
         self.progress=progress or (lambda stage,current,total,errors: None)
         self.cancelled=cancelled or (lambda:False)
         self.issues=[]; self.refs=[]; self.unknown=[]; self.opaque=[]
         self.source_inventory=[]; self.files_written=[]
         self.counts=Counter(); self.original_counts=Counter()
         self.maps=[]; self.events=[]; self.commons=[]; self.troops=[]
-        self.assets=[]; self.plugins=[]; self.database=[]
+        self.assets=[]; self.plugins=[]; self.database=[]; self.media_diagnostics=[]
         self.targets=set(); self.integrity=[]
         self.output=None; self.root=None; self.encryption_key=""
 
@@ -100,7 +108,9 @@ class Extractor:
                 "package_id":self.package_id,"data_type":kind,"data":data}
 
     def write(self, rel, kind, data):
-        write_json(self.output/rel,self.envelope(kind,data))
+        with self.metrics.stage("output",files=1) as measure:
+            write_json(self.output/rel,self.envelope(kind,data))
+            measure["bytes"]+=(self.output/rel).stat().st_size
         self.files_written.append({"path":rel,"data_type":kind})
 
     def add_ref(self, source_id, event_id, owner_id, kind, target, role, **detail):
@@ -129,6 +139,11 @@ class Extractor:
         except (TypeError,ValueError,IndexError,KeyError,AttributeError):
             self.issue("normalization_failed",page_id,"페이지 정규화 실패. 원본 페이지를 보존했습니다.","error")
             return {"id":page_id,"page_index":index,"raw_unparsed":raw}
+        for command in parsed["commands"]:
+            raw_command=command["raw"]; code=raw_command.get("code"); params=raw_command.get("parameters",[])
+            if code in (231,261):
+                name=params[1 if code==231 else 0] if len(params)>(1 if code==231 else 0) else None
+                self.media_diagnostics.append({"command_id":command["id"],"event_id":event_id,"source_file":source,"code":code,"raw_name":name if isinstance(name,str) else None,"name_type":type(name).__name__,"status":"empty_name" if name=="" else "unconfirmed" if not isinstance(name,str) else "pending","logical_path":("img/pictures/" if code==231 else "movies/")+name if isinstance(name,str) and name else None})
         self.refs.extend(refs); self.unknown.extend(unknown); self.opaque.extend(opaque)
         for b in parsed["flow_blocks"]:
             if b["end_index"] is None: self.issue("unclosed_branch",b["command_id"],"분기 종료 명령을 찾지 못했습니다. 원본 유지.")
@@ -211,10 +226,11 @@ class Extractor:
         folder=Path(folder)
         reject_links(folder)
         folder=folder.resolve()
-        candidates=discover(folder,(),self.cancel,self.issue)
+        with self.metrics.stage("discovery"):
+            candidates=discover(folder,(),self.cancel,self.issue)
         if candidate is None:
-            if len(candidates)!=1: raise ValueError(f"데이터 루트가 {len(candidates)}개입니다. 분석 화면/--root로 하나를 선택하세요.")
-            candidate=candidates[0]
+            candidate=preferred(candidates)
+            if candidate is None: raise ValueError("지원 데이터를 읽을 수 있는 폴더가 없습니다. System/MapInfos/Map 파일과 손상 여부를 확인하세요." if not candidates else f"유효한 데이터 폴더 후보가 {len(candidates)}개입니다. 게임 이름과 경로로 선택하세요.")
         else:
             matches=[c for c in candidates if c.root==candidate.root and c.data_dir==candidate.data_dir]
             if not matches: raise UnsafePath("선택한 데이터 루트가 입력 폴더에서 확인되지 않습니다.")
@@ -258,14 +274,24 @@ class Extractor:
         self.write("manifest.json","manifest",self.manifest())
         try:
             if candidate.engine=="MV_MZ": self.issue("engine_uncertain","engine","엔진이 불확실하여 공통 JSON 명령만 해석합니다.")
-            self.extract(files)
-            self.finish()
+            with self.metrics.stage("extraction",files=len(files),bytes=sum(p.stat().st_size for p in files)):
+                self.extract(files)
+            with self.metrics.stage("validation"):
+                self.finish()
+            if self.options.story_zip:
+                with self.metrics.stage("zip") as measure:
+                    self.emit("Story.zip 생성",0,1)
+                    archive=story_package(self.output,self.cancel)
+                    measure["files"]=1;measure["bytes"]=archive.stat().st_size
         except Cancelled:
+            self.schema_valid=False
             self.state="cancelled"
             self.write("reports/warnings.json","issues",self.issues)
             self.write("manifest.json","manifest",self.manifest())
             self.write("report.json","report",self.report(False))
+            self.write("reports/validation.json","validation",{"valid":False,"errors":[{"path":"operation","message":"취소 또는 실패로 최종 검증을 완료하지 않았습니다."}]})
         except (OSError,ValueError,MemoryError,RecursionError) as error:
+            self.schema_valid=False
             self.state="partial" if self.counts else "failed"
             code = {28:"disk_full",13:"permission_denied",2:"file_missing"}.get(getattr(error,"errno",None),"extraction_interrupted")
             self.issue(code,str(getattr(error,"filename",None) or "output"),"남은 추출 결과를 보존했습니다. 저장 공간/접근 권한 또는 손상 파일을 확인하고 새 결과 폴더로 재시도하세요.","error")
@@ -273,9 +299,16 @@ class Extractor:
                 self.write("reports/warnings.json","issues",self.issues)
                 self.write("manifest.json","manifest",self.manifest())
                 self.write("report.json","report",self.report(False))
+                self.write("reports/validation.json","validation",{"valid":False,"errors":[{"path":"operation","message":"실패 후 결과는 부분 보존되었습니다."}]})
             except OSError: pass
         try: (output/MARKER).write_text(self.state,encoding="utf-8")
         except OSError: pass
+        performance=self.metrics.report();performance["validation"]={"full":getattr(self,"validation_stats",{}),"final_reports":getattr(self,"final_validation_stats",{})}
+        try:
+            if list(validate_value(self.envelope("performance",performance))):raise ValueError("성능 보고서 형식 오류")
+            self.write("reports/performance.json","performance",performance)
+        except OSError:pass
+        self.progress("완료 · "+self.state,1,1,sum(x["severity"]=="error" for x in self.issues))
         return self.report(getattr(self,"schema_valid",False))
 
     def extract(self, files):
@@ -396,17 +429,20 @@ class Extractor:
             canonical=self.canonical_resource(rel)
             if canonical is not None:
                 try:
-                    rec=process_asset(p,self.root,self.output,system,self.options,self.cancel,canonical)
+                    with self.metrics.stage("resources",files=1,bytes=p.stat().st_size):
+                        rec=process_asset(p,self.root,self.output,system,self.options,self.cancel,canonical)
                 except Cancelled: raise
-                except Exception:
+                except Exception as error:
                     # Deliberately per-file isolation; keep secrets out of exception text.
                     rec={"id":"asset:"+hashlib.sha256(rel.encode()).hexdigest()[:24],"source_path":rel,"status":"failed",
                          "category":"images" if canonical.startswith("img/") else canonical.split('/')[0],"output_path":None,"logical_path":str(Path(canonical).with_suffix('')).replace('\\','/')}
                     try: rec.update(sha256=digest(p,self.cancel),size_bytes=p.stat().st_size,original_extension=p.suffix)
                     except OSError: pass
-                    self.issue("asset_failed",rel,"리소스를 읽거나 검증/복원하지 못했습니다. 파일 손상, 표준 키, 권한을 확인하세요.","error")
+                    code=getattr(error,"code",None) or ({2:"source_missing",13:"access_denied",28:"disk_full"}.get(getattr(error,"errno",None),"io_failed") if isinstance(error,OSError) else "corrupt_media")
+                    rec["diagnostic_code"]=code
+                    self.issue(code,rel,ERROR_HINTS.get(code,"리소스 읽기 또는 형식 검증 실패. 원본 파일과 접근 권한을 확인하세요."),"error")
                 if rec["status"]=="unsupported_encryption": self.issue("unsupported_encryption",rel,"표준 암호화로 확인되지 않아 건너뛰었습니다.")
-                if rec["status"] in ("failed","unsupported_encryption"):
+                if rec["status"] in ("failed","unsupported_encryption") and self.options.raw_json:
                     try:
                         target=self.output/"assets/original"/rec["id"].split(":",1)[1]/p.name
                         copy_stream(p,target,self.cancel); rec["original_archive_path"]=target.relative_to(self.output).as_posix()
@@ -420,6 +456,25 @@ class Extractor:
                 except OSError: self.issue("script_archive_failed",rel,"JavaScript 원본을 보관하지 못했습니다.","error")
         # Keep indexes available even when media copying is disabled.
         self.build_indexes()
+        self.resource_report()
+
+    def resource_report(self):
+        groups={};categories={};by_logical=defaultdict(list)
+        for asset in self.assets:
+            by_logical[asset['logical_path']].append(asset)
+            state=asset['status']; category=asset['category']
+            categories.setdefault(category,Counter())[state]+=1
+            code=asset.get('diagnostic_code') or state
+            group=groups.setdefault(code,{'count':0,'files':[],'explanation':ERROR_HINTS.get(code,code)})
+            group['count']+=1;group['files'].append(asset['source_path'])
+        for ref in self.media_diagnostics:
+            if ref['status']!='pending':continue
+            matches=by_logical.get(ref['logical_path'],[])
+            if not matches:ref['status']='source_not_found'
+            elif len(matches)>1:ref['status']='ambiguous'
+            else:
+                a=matches[0];ref.update(status=a['status'],asset_id=a['id'],source_path=a['source_path'],output_path=a.get('output_path'),diagnostic_code=a.get('diagnostic_code'))
+        self.write('reports/resource_diagnostics.json','resource_diagnostics',{'groups':groups,'categories':categories,'references':self.media_diagnostics,'retry_policy':'실패 리소스 재시도는 현재 원본과 키를 다시 읽어 별도 ZIP으로 저장합니다. 정상 파일을 재처리하거나 기존 패키지를 수정하지 않습니다. 재생기 연결 여부는 여기서 판정하지 않습니다.'})
 
     def canonical_resource(self, rel):
         matches=[]
@@ -559,7 +614,7 @@ class Extractor:
         self.write("normalized/troops.json","troops",self.troops)
         self.write("normalized/database_index.json","database_index",self.database)
         self.write("normalized/plugins.json","plugins",self.plugins)
-        self.write("normalized/assets.json","assets",self.assets)
+        self.write("normalized/assets.json","assets",[{k:v for k,v in a.items() if k!="diagnostic_code"} for a in self.assets])
         calls=defaultdict(list); callers=defaultdict(list); connections=[]
         for r in self.refs:
             if r["target_kind"]=="common_event":
@@ -592,9 +647,11 @@ class Extractor:
 
     def write_lines(self, rel, kind, rows):
         path=self.output/rel; path.parent.mkdir(parents=True,exist_ok=True)
-        with path.open("w",encoding="utf-8",newline="\n") as f:
-            for row in rows:
-                self.cancel(); f.write(json.dumps(self.envelope(kind,row),ensure_ascii=False,allow_nan=False)+"\n")
+        with self.metrics.stage("output",files=1) as measure:
+            with path.open("w",encoding="utf-8",newline="\n") as f:
+                for row in rows:
+                    self.cancel(); f.write(json.dumps(self.envelope(kind,row),ensure_ascii=False,allow_nan=False)+"\n")
+            measure['bytes']+=path.stat().st_size
         self.files_written.append({"path":rel,"data_type":kind})
 
     def generate_chunks(self):
@@ -651,6 +708,10 @@ class Extractor:
                 "errors":sum(x["severity"]=="error" for x in self.issues),"warnings":sum(x["severity"]=="warning" for x in self.issues),
                 "unknown_commands":len(self.unknown),"opaque_operations":len(self.opaque),"output_folder":str(self.output)}
 
+    def validation_progress(self,current,total,errors,path):
+        self.cancel()
+        self.progress("출력 검증 · "+path,current,total,errors)
+
     def finish(self):
         if not self.maps or not self.events:
             self.issue("no_story_content","normalized","맵 또는 이벤트가 0개입니다. 원본 데이터 폴더와 파싱 오류를 확인하세요. 남은 데이터는 보존합니다.","error")
@@ -671,8 +732,9 @@ class Extractor:
         self.write("reports/warnings.json","issues",self.issues)
         self.write("report.json","report",self.report(True))
         self.write("manifest.json","manifest",self.manifest())
-        self.emit("출력 데이터 검증 중",0,1)
-        errors=validate_package(self.output,cancel=self.cancel)
+        self.validation_stats={}; self.final_validation_stats={}
+        self.emit("검증 파일 목록 준비",0,0)
+        errors=validate_package(self.output,cancel=self.cancel,progress=self.validation_progress,stats=self.validation_stats)
         if errors:
             for e in errors: self.issue("schema_validation_failed",e["path"],e["message"],"error")
             self.state="invalid"
@@ -684,8 +746,9 @@ class Extractor:
         self.write("report.json","report",self.report(not errors))
         self.write("manifest.json","manifest",self.manifest())
         # Validate the final reports and state too.
-        final_errors=validate_package(self.output,cancel=self.cancel)
+        final_errors=validate_package(self.output,cancel=self.cancel,progress=self.validation_progress,only=("reports/validation.json","reports/warnings.json","report.json","manifest.json"),stats=self.final_validation_stats)
         if final_errors: raise ValueError("최종 출력 스키마 검사 실패. 결과를 정상 패키지로 사용하지 마세요.")
-        self.progress("완료",1,1,sum(x["severity"]=="error" for x in self.issues))
+        self.metrics.stages["validation"]["files"]=self.validation_stats["files"]+self.final_validation_stats["files"]
+        self.metrics.stages["validation"]["bytes"]=self.validation_stats["bytes"]+self.final_validation_stats["bytes"]
 
 

@@ -1,0 +1,119 @@
+{
+  "synthetic": true,
+  "environment": "Linux, CPython 3.12, separate fresh processes; single measured run per revision; not a universal performance promise",
+  "baseline_commit": "c3e9870d4d1dee6916d4b873b4c29a0227d92fa3",
+  "same_options": "Options() full preservation, not a profile change",
+  "before": {
+    "label": "baseline",
+    "events": 1001,
+    "commands": 29010,
+    "extraction_seconds": 40.01596838799992,
+    "validation_calls": [
+      {
+        "seconds": 17.378593846000058,
+        "files": 41,
+        "errors": 0,
+        "scoped": null
+      },
+      {
+        "seconds": 19.532744211999898,
+        "files": 42,
+        "errors": 0,
+        "scoped": null
+      }
+    ],
+    "validation_seconds": 36.911338057999956,
+    "peak_rss_kib": 187324,
+    "state": "complete_with_issues",
+    "schema_valid": true,
+    "integrity": {
+      "events_compared": 1004,
+      "all_raw_equal": true,
+      "counts_equal": true,
+      "mismatches": []
+    },
+    "story_zip_bytes": 2557038,
+    "zip_seconds": 0.4129223150000598,
+    "output_folder": "/workspace/scratch/4377af4c0742/benchmark-before-final/exports/RPGMakerExtractor_game"
+  },
+  "after": {
+    "label": "improved",
+    "events": 1001,
+    "commands": 29010,
+    "extraction_seconds": 11.811078652999868,
+    "validation_calls": [
+      {
+        "seconds": 8.681271744000014,
+        "files": 42,
+        "errors": 0,
+        "scoped": null
+      },
+      {
+        "seconds": 0.0017256379999253113,
+        "files": 4,
+        "errors": 0,
+        "scoped": [
+          "reports/validation.json",
+          "reports/warnings.json",
+          "report.json",
+          "manifest.json"
+        ]
+      }
+    ],
+    "validation_seconds": 8.68299738199994,
+    "peak_rss_kib": 187732,
+    "state": "complete_with_issues",
+    "schema_valid": true,
+    "integrity": {
+      "events_compared": 1004,
+      "all_raw_equal": true,
+      "counts_equal": true,
+      "mismatches": []
+    },
+    "story_zip_bytes": 2557279,
+    "zip_seconds": 0.39132132899999306,
+    "output_folder": "/workspace/scratch/4377af4c0742/benchmark-release/exports/RPGMakerExtractor_game"
+  },
+  "event_shards_equal": [
+    {
+      "file": "map_001.json",
+      "equal": true
+    },
+    {
+      "file": "map_002.json",
+      "equal": true
+    },
+    {
+      "file": "common_0002.json",
+      "equal": true
+    },
+    {
+      "file": "common_0001.json",
+      "equal": true
+    },
+    {
+      "file": "troop_0001.json",
+      "equal": true
+    }
+  ],
+  "validation_equivalence": "full schema passed; original event/command reconstruction and counts match; discriminator validators also checked against unoptimized validator",
+  "player_compatibility": [
+    {
+      "passed": true,
+      "synthetic": true,
+      "zipBytes": 24037,
+      "maps": 2,
+      "rawCommands": 26,
+      "firstDialogue": true
+    },
+    {
+      "passed": true,
+      "synthetic": true,
+      "zipBytes": 23970,
+      "maps": 2,
+      "rawCommands": 26,
+      "firstDialogue": true
+    }
+  ],
+  "real_game_verified": false
+}

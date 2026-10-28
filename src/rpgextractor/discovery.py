@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 import re
 from .io import safe_files, reject_links, load_json
@@ -16,6 +16,9 @@ class Candidate:
     file_count:int
     layout:dict[str,list[str]]
     archive:Path|None=None
+    title:str=""
+    score:int=0
+    validation:dict=field(default_factory=dict)
     def to_dict(self):
         return {**asdict(self),'root':str(self.root),'data_dir':str(self.data_dir),'archive':str(self.archive) if self.archive else None}
 
@@ -71,14 +74,7 @@ def discover(folder,exclude=(),cancel=lambda:None,issue=None):
         if len(files)>250000: raise ValueError('파일 검색 한도 250,000개를 초과했습니다.')
     dirs=set()
     for p in files:
-        if re.fullmatch(r'(?:System|MapInfos|CommonEvents|Actors|Map\d+)\.(json|rvdata2)',p.name,re.I):
-            try:
-                if p.suffix.lower()=='.rvdata2':
-                    with p.open('rb') as f: valid=f.read(2)==b'\x04\x08'
-                else:
-                    v=load_json(p); valid=isinstance(v,(dict,list))
-                if valid: dirs.add(p.parent)
-            except (OSError,ValueError,RecursionError): pass
+        if re.fullmatch(r'(?:System|MapInfos|CommonEvents|Actors|Map\d+)\.(json|rvdata2)',p.name,re.I):dirs.add(p.parent)
     result=[]
     if selected_file and selected_file.suffix.lower()==".rgss3a": dirs.clear()
     for data in sorted(dirs):
@@ -88,7 +84,28 @@ def discover(folder,exclude=(),cancel=lambda:None,issue=None):
             if any(d!=data and root.parent in d.parents and root not in d.parents for d in dirs): break
             root=root.parent
         scoped=[p for p in files if root in p.parents]
-        result.append(identify(root,data,scoped))
+        candidate=identify(root,data,scoped)
+        from .adapters import adapter_for
+        adapter=adapter_for(candidate.engine)
+        candidates=[p for p in scoped if p.parent==data and p.suffix.lower()==adapter.extension]
+        maps=[p for p in candidates if re.fullmatch(r'Map\d+',p.stem,re.I)]
+        core=[p for p in candidates if p.stem in ('System','MapInfos','CommonEvents')]
+        valid=0;sample_good=0;failures=[]
+        for p in core+maps[:3]:
+            cancel()
+            try:
+                value=adapter.load(p,cancel)
+                okay=isinstance(value,dict) if p.stem=='System' else isinstance(value,(dict,list)) if p.stem=='MapInfos' else isinstance(value,list) if p.stem=='CommonEvents' else isinstance(value,dict) and isinstance(value.get('events'),list)
+                if not okay:raise ValueError('unexpected structure')
+                if p in maps:sample_good+=1
+                else:valid+=1
+                if p.stem=='System':candidate.title=str(value.get('gameTitle') or root.name)
+            except (OSError,ValueError,UnicodeError,RecursionError):failures.append(p.name)
+        candidate.validation={'core_valid':valid,'core_present':len(core),'map_files':len(maps),'sample_valid':sample_good,'sample_checked':min(3,len(maps)),'failed_files':failures}
+        candidate.score=valid*10+sample_good*5+(10 if maps else 0)
+        candidate.evidence.append(f'핵심 데이터 {valid}/{len(core)}개 유효 · 맵 {len(maps)}개 · 맵 표본 {sample_good}/{min(3,len(maps))}개 유효')
+        if valid or sample_good:result.append(candidate)
+        elif issue:issue('invalid_data_root',str(data),'핵심 파일은 있지만 지원 데이터로 파싱하지 못했습니다.')
     from .adapters.rgss3 import entries
     for p in files:
         if p.suffix.lower()=='.rgss3a' and (selected_file is None or selected_file==p):
@@ -99,4 +116,10 @@ def discover(folder,exclude=(),cancel=lambda:None,issue=None):
                     result.append(Candidate(p.parent,p.parent/'Data','VXACE','high',['표준 RGSSAD v3 아카이브'],None,len([e for e in core if re.search(r'Map\d+',e.name)]),len(rows),{},p))
             except (OSError,ValueError,UnicodeError):
                 if issue: issue('archive_invalid',str(p),'표준 RGSS3 아카이브를 읽을 수 없습니다.')
-    return result
+    return sorted(result,key=lambda c:(-c.score,str(c.data_dir)))
+
+
+def preferred(candidates):
+    if len(candidates)==1:return candidates[0]
+    if candidates and candidates[0].score>candidates[1].score+10:return candidates[0]
+    return None

@@ -8,7 +8,8 @@ from PySide6.QtCore import Qt, QObject, QThread, Signal, QUrl, QTimer, QSettings
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QLineEdit,QPushButton,
                                QFileDialog,QComboBox,QCheckBox,QGroupBox,QGridLayout,QProgressBar,QPlainTextEdit,QMessageBox)
-from .discovery import discover
+from .discovery import discover, preferred
+from .retry import retry_resources
 from .pipeline import Extractor, Options
 from .io import Cancelled, load_json
 from .packaging import story_package
@@ -26,14 +27,10 @@ class Worker(QObject):
                 if self.stop.is_set(): raise Cancelled("작업을 취소했습니다.")
             if self.action=="scan":
                 result=discover(self.folder,(),cancel)
+            elif self.action=="retry":
+                result=retry_resources(self.output,self.folder,cancel=cancel,progress=self.progress.emit)
             else:
                 result=Extractor(self.options,self.progress.emit,self.stop.is_set).run(self.folder,self.output,self.candidate)
-                if result["output_counts"]["maps"] and result["output_counts"]["events"]:
-                    try:
-                        self.progress.emit("경량 Story.zip 생성",0,1,0)
-                        story_package(result["output_folder"],cancel)
-                    except (OSError,Cancelled,zipfile.BadZipFile) as exc:
-                        result["package_warning"]="Story.zip 생성 실패: "+str(exc)+". 추출 폴더는 보존됩니다."
             self.finished.emit(result)
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -44,7 +41,7 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         self.settings=QSettings("RPGMakerExtractor","RPGMakerExtractor")
         self.scan_timer=QTimer(self); self.scan_timer.setSingleShot(True); self.scan_timer.timeout.connect(self.start_scan)
-        self.candidates=[]; self.thread=None; self.stop=threading.Event(); self.last_output=None; self.last_stage=""
+        self.candidates=[]; self.thread=None; self.stop=threading.Event(); self.last_output=None; self.last_retry=None; self.last_stage=""
         content=QWidget(); self.setCentralWidget(content); layout=QVBoxLayout(content); layout.setSpacing(12)
         title=QLabel("RPG Maker 게임 데이터 추출"); title.setStyleSheet("font-size: 23px; font-weight: 700; color: #173f67;")
         layout.addWidget(title); layout.addWidget(QLabel("게임 실행 없이 이벤트·조건·리소스를 분석하여 별도 폴더에 저장합니다."))
@@ -60,6 +57,7 @@ class MainWindow(QMainWindow):
         row=QHBoxLayout(); self.scan=QPushButton("다시 분석"); self.roots=QComboBox(); row.addWidget(self.scan); row.addWidget(self.roots,1); layout.addLayout(row)
         self.scan.clicked.connect(self.start_scan); self.roots.currentIndexChanged.connect(self.show_candidate)
         self.evidence=QLabel("게임 폴더를 선택하거나 이 창에 끌어 놓으세요. 자동으로 분석합니다."); self.evidence.setWordWrap(True); layout.addWidget(self.evidence)
+        self.profile=QComboBox();self.profile.addItems(["스토리 감상용 (기본)","전체 보존·상세 분석용"]);layout.addWidget(self.profile)
         group=QGroupBox("고급 설정"); group.setVisible(False);
         advanced=QCheckBox("고급 설정 표시"); layout.addWidget(advanced); advanced.toggled.connect(group.setVisible)
         grid=QGridLayout(group); self.checks={}
@@ -75,15 +73,22 @@ class MainWindow(QMainWindow):
                 ("sensitive_system","키 포함 System.json 원본 보관",False,"선택하면 source_archive에 암호화 키가 포함됩니다. 개인 보관용.")]
         for i,(key,label,checked,tip) in enumerate(labels):
             box=QCheckBox(label); box.setChecked(checked); box.setToolTip(tip); self.checks[key]=box; grid.addWidget(box,i//2,i%2)
+        self.profile.currentIndexChanged.connect(self.apply_profile)
+        self.apply_profile(0)
         layout.addWidget(group)
         idrow=QHBoxLayout(); idrow.addWidget(QLabel("게임 식별자 (선택)")); self.game_id=QLineEdit(); self.game_id.setPlaceholderText("비워 두면 자동 생성 · 영문/숫자/._-"); idrow.addWidget(self.game_id); grid.addLayout(idrow,6,0,1,2)
         row=QHBoxLayout(); self.start=QPushButton("추출 시작"); self.start.setStyleSheet("font-weight: bold; padding: 10px; background: #d9ebff;")
         self.start.setEnabled(False); self.cancel_button=QPushButton("취소"); self.cancel_button.setEnabled(False); self.open=QPushButton("결과 폴더 열기"); self.open.setEnabled(False)
         row.addWidget(self.start,2); row.addWidget(self.cancel_button); row.addWidget(self.open); layout.addLayout(row)
+        self.retry=QPushButton("실패 리소스만 재시도");self.retry.setEnabled(False);layout.addWidget(self.retry);self.retry.clicked.connect(lambda:self.launch("retry"))
         self.start.clicked.connect(self.start_extract); self.cancel_button.clicked.connect(self.stop.set); self.open.clicked.connect(self.open_output)
         self.bar=QProgressBar(); self.bar.setValue(0); layout.addWidget(self.bar)
         self.status=QLabel("대기 중"); self.status.setWordWrap(True); layout.addWidget(self.status)
         self.log=QPlainTextEdit(); self.log.setReadOnly(True); self.log.document().setMaximumBlockCount(1500); layout.addWidget(self.log,1)
+    def apply_profile(self,index):
+        defaults=Options.story() if index==0 else Options()
+        for name,box in self.checks.items():box.setChecked(getattr(defaults,name))
+
     def dragEnterEvent(self,event):
         if not self.thread and event.mimeData().hasUrls() and any(u.isLocalFile() for u in event.mimeData().urls()): event.acceptProposedAction()
     def dropEvent(self,event):
@@ -112,11 +117,12 @@ class MainWindow(QMainWindow):
         if not self.folder.text().strip(): QMessageBox.information(self,"폴더 필요","게임 폴더를 선택하세요."); return
         self.scan_timer.stop()
         if action=="extract" and not self.candidates: return
+        if action=="extract":self.last_retry=None
         self.stop.clear(); self.last_stage=""; self.open.setEnabled(False)
-        options=Options(**{k:v.isChecked() for k,v in self.checks.items()},game_id=self.game_id.text().strip() or None)
+        options=Options(**{k:v.isChecked() for k,v in self.checks.items()},game_id=self.game_id.text().strip() or None,story_zip=True)
         candidate=self.candidates[self.roots.currentIndex()] if action=="extract" else None
         self.active_action=action; self.thread=QThread(self)
-        self.worker=Worker(action,Path(self.folder.text()),Path(self.output.text()).absolute() if self.output.text() else None,candidate,options,self.stop)
+        self.worker=Worker(action,Path(self.folder.text()),self.last_output if action=="retry" else Path(self.output.text()).absolute() if self.output.text() else None,candidate,options,self.stop)
         self.worker.moveToThread(self.thread); self.thread.started.connect(self.worker.run)
         self.worker.progress.connect(self.on_progress); self.worker.finished.connect(self.on_result); self.worker.failed.connect(self.on_error)
         self.worker.finished.connect(self.thread.quit); self.worker.failed.connect(self.thread.quit)
@@ -124,6 +130,7 @@ class MainWindow(QMainWindow):
         self.set_busy(True); self.bar.setRange(0,0); self.status.setText("분석 중…" if action=="scan" else "추출 준비 중…"); self.thread.start()
     def set_busy(self,busy):
         for control in [self.folder,self.output,self.browse_input,self.browse_output,self.scan,self.roots,self.game_id,*self.checks.values()]: control.setEnabled(not busy)
+        self.profile.setEnabled(not busy); self.retry.setEnabled(not busy and self.last_output is not None)
         self.start.setEnabled(not busy and bool(self.candidates)); self.cancel_button.setEnabled(busy)
     def start_scan(self): self.launch("scan")
     def start_extract(self): self.launch("extract")
@@ -134,18 +141,35 @@ class MainWindow(QMainWindow):
     def on_result(self,result):
         if self.active_action=="scan":
             self.candidates=result; self.roots.clear()
-            for c in result: self.roots.addItem(f"{c.engine} · {c.root}")
+            for c in result: self.roots.addItem(f"{c.title or c.root.name} · {c.engine} · 맵 {c.map_files}개 · {c.data_dir}")
             self.status.setText(f"데이터 루트 {len(result)}개 발견. 여러 개이면 목록에서 선택하세요." if result else "지원 데이터 루트를 찾지 못했습니다. data 폴더/엔진 파일을 확인하세요.")
             self.bar.setRange(0,100); self.bar.setValue(100)
+        elif self.active_action=="retry":
+            self.last_retry=Path(result["output_folder"]);self.open.setEnabled(True)
+            self.status.setText("리소스 재시도 완료 · "+result["output_folder"]+" · ResourcesRetry.zip을 재생기에 연결하세요.")
+            self.log.appendPlainText(self.status.text())
         else:
             if result.get("package_warning"): self.log.appendPlainText(result["package_warning"])
             self.last_output=Path(result["output_folder"]); self.open.setEnabled(True)
             counts=result["output_counts"]; state={"complete":"완료","complete_with_issues":"완료 (경고 확인)","partial":"부분 추출 (오류 확인)","cancelled":"취소됨","invalid":"검증 실패","failed":"추출 실패"}.get(result["state"],result["state"])
             self.status.setText(f"{state} · 맵 {counts['maps']:,} · 이벤트 {counts['events']:,} · 명령 {counts['commands']:,}\n스위치 {result['switches']:,} · 변수 {result['variables']:,} · 이미지 {result['images']:,} · 복원 {result['decrypted']:,} · 실패 {result['asset_failures']:,} · 플러그인 {result['plugins']:,}\n오류 {result['errors']:,} · 경고 {result['warnings']:,} · report.json을 확인하세요.")
+            try:
+                media=load_json(self.last_output/'reports/resource_diagnostics.json')['data']['categories']
+                labels=[]
+                for name,label in [('images','이미지'),('movies','영상'),('audio','음성')]:
+                    counts=media.get(name,{})
+                    status='일부 실패' if counts.get('failed',0)+counts.get('unsupported_encryption',0) else '옵션 제외 포함' if counts.get('copy_disabled',0)+counts.get('decryption_disabled',0) else '처리 완료' if counts else '발견 없음'
+                    labels.append(label+': '+status)
+                story='확인 필요' if any(x['severity']=='error' and x['code'] not in ('key_missing','header_mismatch','truncated_file','restored_format_invalid','corrupt_media','io_failed','access_denied','source_missing') for x in load_json(self.last_output/'reports/warnings.json')['data']) else '데이터·무결성 확인'
+                self.status.setText(self.status.text()+'\n스토리: '+story+' / '+' / '.join(labels)+'\nStory.zip: 재생기용 · assets/: 별도 미디어 · reports/: 진단')
+            except (OSError,ValueError,KeyError):pass
             self.log.appendPlainText(self.status.text())
             try:
                 issues=load_json(self.last_output/"reports/warnings.json")["data"]
-                for item in issues[:100]: self.log.appendPlainText(f"[{item['severity']}] {item['path']}: {item['message']}")
+                from collections import Counter
+                for code,count in Counter(item["code"] for item in issues).items():
+                    sample=next(item for item in issues if item["code"]==code)
+                    self.log.appendPlainText(f"[{code}] {count}건 · 예: {sample['path']} · {sample['message']}")
                 if len(issues)>100: self.log.appendPlainText("나머지 문제는 reports/warnings.json을 확인하세요.")
             except (OSError,ValueError,KeyError): pass
             self.bar.setRange(0,100); self.bar.setValue(100 if result["state"] in ("complete","complete_with_issues") else 0)
@@ -155,7 +179,7 @@ class MainWindow(QMainWindow):
     def on_thread_finished(self):
         old=self.thread; self.thread=None; old.deleteLater(); self.set_busy(False); self.show_candidate(self.roots.currentIndex())
     def open_output(self):
-        if self.last_output: return QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.last_output)))
+        if self.last_output: return QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.last_retry or self.last_output)))
         return False
     def closeEvent(self,event):
         if self.thread:
