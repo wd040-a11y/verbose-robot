@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import { importZip, Package, safe, get, put } from "../src/storage.js";
+import { importZip, Package, safe, get, put, library } from "../src/storage.js";
 test("safe path rejects traversal and Windows drive paths", () => {
   for (const p of ["../a", "/a", "C:/a", "x\\a", "x/../a"])
     assert.equal(safe(p), false);
@@ -82,3 +82,5 @@ test("portable byte records and legacy Blob records both preserve bytes and MIME
   d.close();
 });
 
+
+test("invalidated place cache does not break saved game listing", async()=>{await put("meta","places-v1:invalidated",null);assert.ok(Array.isArray(await library()));});

@@ -63,7 +63,7 @@ export async function library() {
   const d = await db;
   return new Promise((ok) => {
     const r = d.transaction("meta").objectStore("meta").getAll();
-    r.onsuccess = () => ok(r.result.filter((x) => x.manifest));
+    r.onsuccess = () => ok(r.result.filter((x) => x?.manifest));
   });
 }
 export class Package {
