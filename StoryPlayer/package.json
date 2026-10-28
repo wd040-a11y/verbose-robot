@@ -21,14 +21,25 @@
     "productName": "RPGStoryPlayer",
     "files": [
       "dist/**/*",
-      "electron.cjs"
+      "electron.cjs",
+      "preload.cjs",
+      "native-import.cjs"
     ],
     "win": {
       "target": "portable"
     },
     "directories": {
       "output": "release"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "importer",
+        "to": "importer",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1",

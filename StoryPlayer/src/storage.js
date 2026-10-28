@@ -1,4 +1,6 @@
-import {mountZip,mountResource,lazyFile,lazyResource,readEntry} from './lazy-zip.js';
+import {nativePackage} from './native-package.js';
+import {personalPrefixes,relatedGameKey} from './library-management.js';
+import {unmount,mountZip,mountResource,lazyFile,lazyResource,readEntry} from './lazy-zip.js';
 import {
   resourceIndex,
   resolveResource,
@@ -66,12 +68,40 @@ export async function library() {
     r.onsuccess = () => ok(r.result.filter((x) => x?.manifest));
   });
 }
+export async function removeGame(id,{keepSaves=true}={}) {
+  const meta=await get('meta',id);if(!meta)return;
+  const saved={};
+  if(keepSaves)for(const prefix of personalPrefixes){const v=await get('meta',prefix+id);if(v!==undefined)saved[prefix]=v;}
+  const d=await db;
+  await new Promise((ok,no)=>{
+    const t=d.transaction(['meta','files'],'readwrite'),m=t.objectStore('meta');
+    if(keepSaves)m.put({packageId:meta.manifest.package_id,title:meta.title,saved,at:new Date().toISOString()},'retained:'+id);
+    for(const store of ['meta','files']){
+      const r=t.objectStore(store).openCursor();r.onsuccess=()=>{const c=r.result;if(!c)return;
+        if(store==='files'?String(c.key).startsWith(id+'/'):relatedGameKey(c.key,id))c.delete();
+        if(store==='meta'&&c.key==='last-game'&&c.value===id)c.delete();
+        if(store==='meta'&&!keepSaves&&c.value?.packageId===meta.manifest.package_id&&c.value?.saved)c.delete();c.continue();};
+    }
+    t.oncomplete=ok;t.onerror=()=>no(t.error);t.onabort=()=>no(t.error);
+  });
+  await unmount(id);
+  if(meta.nativeToken&&globalThis.window?.localGames)await window.localGames.remove(meta.nativeToken);
+}
+export async function savedGames(){const d=await db;return new Promise((ok,no)=>{const r=d.transaction('meta').objectStore('meta').getAll();r.onsuccess=()=>ok(r.result.filter(x=>x?.packageId&&x?.saved));r.onerror=()=>no(r.error);});}
 export class Package {
   constructor(meta) {
     Object.assign(this, meta);
     this.cache = new Map();
+    this.nativeReady = null;
+  }
+  async ensureNative(){
+    if(!this.nativeToken)return;
+    if(!window.localGames)throw Error('이 게임은 Windows 로컬 등록 자료입니다. 모바일에는 Game.zip을 가져오세요.');
+    if(!this.nativeReady)this.nativeReady=(async()=>{const f=nativePackage(await window.localGames.open(this.nativeToken));const z=new ZipReader(f.reader,{useWebWorkers:false}),entries=await z.getEntries();mountZip(this.id,z,entries,'');})();
+    return this.nativeReady;
   }
   async json(path) {
+    await this.ensureNative();
     if (!safe(path)) throw Error("안전하지 않은 참조");
     if (this.cache.has(path)) return this.cache.get(path);
     const b = (await get("files", this.id + "/" + path)) || await lazyFile(this.id,path,32*1024**2);
@@ -92,6 +122,7 @@ export class Package {
     return v.data;
   }
   async source(path) {
+    await this.ensureNative();
     if (!safe(path)) return null;
     const b = (await get("files", this.id + "/" + path)) || await lazyFile(this.id,path,4*1024**2);
     return b && b.size <= 4 * 1024 * 1024 ? await b.arrayBuffer() : null;
@@ -126,11 +157,11 @@ export class Package {
     return blob ? (await inspectImage(blob)).blob : null;
   }
 }
-export async function importZip(file, progress, existing) {
+export async function importZip(file, progress=()=>{}, existing, options={}) {
   // Read sequentially with native Streams, without worker lifecycle dependencies.
   // CRC checks and per-entry/total size limits remain enabled.
-  const zip = new ZipReader(new BlobReader(file), { useWebWorkers: false });
-  let retained=false;
+  const zip = new ZipReader(file.reader || new BlobReader(file), { useWebWorkers: false });
+  let retained=false, importedId=null, committed=false;
   try {
     const entries = await zip.getEntries();
     if (entries.length > 30000) throw Error(`ZIP 파일 개수 ${entries.length}개: 한도 30000개 초과`);
@@ -145,7 +176,7 @@ export async function importZip(file, progress, existing) {
       total += e.uncompressedSize;
       if(!Number.isSafeInteger(e.uncompressedSize)||!Number.isSafeInteger(total))throw Error(`ZIP 크기 메타데이터 오류: ${e.filename}`);
     }
-    const lazy=total>256*1024**2 || file.size>256*1024**2;
+    const lazy=!!file.nativeToken || total>256*1024**2 || file.size>256*1024**2;
     const manifests = entries.filter(
       (e) =>
         e.filename === "manifest.json" || e.filename.endsWith("/manifest.json"),
@@ -232,8 +263,11 @@ export async function importZip(file, progress, existing) {
       typeof manifest.package_id !== "string"
     )
       throw Error("지원하지 않는 패키지");
-    const prefix = m.filename.slice(0, -13),
-      id = lazy ? ((await library()).find(x=>x.lazyArchive&&x.manifest.package_id===manifest.package_id)?.id || crypto.randomUUID()) : crypto.randomUUID();
+    const duplicates=(await library()).filter(x=>x.manifest.package_id===manifest.package_id);
+    const decision=duplicates.length&&options.onDuplicate?await options.onDuplicate(duplicates):'keep';
+    if(decision==='cancel')throw Error('게임 등록을 취소했습니다. 기존 게임은 유지됩니다.');
+    const replace=decision==='replace'?duplicates[0]:null;
+    const prefix=m.filename.slice(0,-13),id=crypto.randomUUID();importedId=id;
     if(lazy){mountZip(id,zip,entries,prefix);retained=true;}
     let i = 0;
     for (const e of entries) {
@@ -252,7 +286,7 @@ export async function importZip(file, progress, existing) {
       }
       progress(++i, entries.length);
     }
-    const meta = { id, manifest, lazyArchive:lazy, archiveName:file.name||null, archiveBytes:file.size, expandedBytes:total, created: new Date().toISOString() },
+    const meta = { id, manifest, nativeToken:file.nativeToken||null, lazyArchive:lazy, archiveName:file.name||null, archiveBytes:file.size, expandedBytes:total, created: new Date().toISOString() },
       p = new Package(meta);
     const [game, maps, events] = await Promise.all([
       p.json("normalized/game.json"),
@@ -270,9 +304,13 @@ export async function importZip(file, progress, existing) {
       events: events.length,
     });
     await put("meta", "places-v2:"+id, null);
-    await put("meta", id, meta);
+    const source=replace?Object.fromEntries(await Promise.all(personalPrefixes.map(async key=>[key,await get('meta',key+replace.id)]))):((await savedGames()).filter(x=>x.packageId===manifest.package_id).sort((a,b)=>b.at.localeCompare(a.at))[0]?.saved||{});
+    for(const [key,value] of Object.entries(source))if(value!==undefined)await put('meta',key+id,value);
+    await put("meta", id, meta);committed=true;
+    if(replace)await removeGame(replace.id,{keepSaves:false});
     return new Package(meta);
   } finally {
+    if(importedId&&!committed){await put('meta',importedId,{id:importedId,manifest:{package_id:'incomplete'}});await removeGame(importedId,{keepSaves:false});retained=false;}
     if(!retained)await zip.close();
   }
 }

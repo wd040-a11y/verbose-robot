@@ -3,15 +3,16 @@ from pathlib import Path
 import zipfile
 
 
-def story_package(output, cancel=lambda: None):
+def story_package(output, cancel=lambda: None, *, media=False):
     root = Path(output).resolve()
-    target = root / 'Story.zip'
-    temporary = root / 'Story.zip.partial'
+    name = 'Game.zip' if media else 'Story.zip'
+    target = root / name
+    temporary = root / (name+'.partial')
     if target.exists():
-        raise FileExistsError('기존 Story.zip을 덮어쓰지 않습니다.')
+        raise FileExistsError('기존 '+name+'을 덮어쓰지 않습니다.')
     try:
         with zipfile.ZipFile(temporary, 'x', compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
-            for folder in ('normalized', 'events', 'schemas'):
+            for folder in ('normalized', 'events', 'schemas') + (('assets',) if media else ()):
                 for path in sorted((root / folder).rglob('*')):
                     cancel()
                     if path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(root):

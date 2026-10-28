@@ -1,9 +1,11 @@
+import {nativePackage} from './native-package.js';
+import {placeName} from './localization/places.js';
 import "./style.css";
 import {indexPlaces} from "./exploration/places.js";
 import {imageViewer,movieViewer} from "./ui/media.js";
 import { StoryCursor } from "./exploration/player.js";
 import { openStory, inspectPackage } from "./ui/story.js";
-import { Package, importZip, library, get, put } from "./storage.js";
+import { Package, importZip, library, get, put, removeGame } from "./storage.js";
 import { Interpreter, initial, clone, selectPage, pageStatus } from "./core.js";
 import { migrateState, seedMap } from "./state.js";
 import { History } from "./core/history.js";
@@ -51,7 +53,7 @@ const c = {
   archives: [],
   referenceIndex: [],
 };
-let language = "original",
+let language = "ko",
   activeTab = "감상",
   mobileView = "장소",
   mode = "story",
@@ -67,6 +69,19 @@ const top = el("div", null, header, "top-controls"),
   gameFile = input(top, "게임 추출 ZIP", "file");
 gameFile.accept = ".zip,application/zip";
 const games = select(top, "등록된 게임", []);
+if(window.localGames){
+ window.localGames.progress(p=>c.status(`${p.stage} · ${p.current}/${p.total} · 오류 ${p.errors}`));
+ button('게임 폴더 열기',async()=>{
+  stopAuto();await archiveSession();
+  let result=await window.localGames.importFolder();
+  if(result?.candidates){const chosen=await new Promise(resolve=>{const d=modal('여러 게임 자료를 찾았습니다');let value=null;result.candidates.forEach((x,i)=>button(`${x.name} · ${x.engine} · 맵 ${x.maps}개 · ${x.path}`,()=>{value=i;d.close();},d));d.addEventListener('close',()=>resolve(value),{once:true});});if(chosen===null)return;result=await window.localGames.importFolder(chosen);}
+  if(!result)return;
+  const pkg=await importZip(nativePackage(result),(n,t)=>c.status(`감상 준비 ${n}/${t}`),undefined,{onDuplicate:duplicateChoice});
+  await refreshGames();await load(pkg.id);
+  if(result.report.asset_failures)c.status(`감상 준비 완료 · 미디어 ${result.report.asset_failures}개 처리 실패. 가능한 대사는 감상할 수 있습니다. 리소스 화면에서 확인하세요.`);
+ },top);
+}
+button("게임 관리", manageGames, top);
 button("콘텐츠 접근성 검사",()=>c.pkg && inspectPackage(c.pkg),top);
 const modeSelect = select(top, "감상 모드", [
     ["story", "스토리 감상 (기본)"],
@@ -78,9 +93,10 @@ const modeSelect = select(top, "감상 모드", [
     ["ko", "한국어"],
     ["both", "원문 + 한국어"],
   ]);
+langSelect.value = "ko";
 const status = el(
   "p",
-  "게임 추출 ZIP을 불러오세요. 이미지 없이도 시작할 수 있습니다.",
+  "게임 감상 ZIP을 불러오세요. CG가 포함된 패키지는 자동으로 연결됩니다.",
   root,
   "status",
 );
@@ -122,10 +138,20 @@ const layout = el("div", null, explore, "explorer"),
   scenes = el("section", null, layout, "scenes"),
   viewer = el("section", null, layout, "viewer");
 el("h2", "장소", locations);
+button("장소 이름 바꾸기",()=>{
+ if(!c.currentMap)return c.status('먼저 장소를 선택하세요.');
+ const d=modal('한국어 장소 이름');el('p',`원문: ${c.currentMap.name}`,d);
+ const name=input(d,'표시할 장소 이름','text');name.value=c.placeNames[c.currentMap.map_id]||'';
+ button('저장',async()=>{const value=name.value.trim();if(value)c.placeNames[c.currentMap.map_id]=value;else delete c.placeNames[c.currentMap.map_id];await put('meta','place-names:'+c.pkg.id,c.placeNames);renderMaps();d.close();},d);
+},locations);
 const mapList = el("div", null, locations);
 el("h2", "인물과 장면", scenes);
 const eventFilter = select(scenes, "장면 종류", [
-  ["content", "대화 · 선택지 · CG 우선"],
+  ["content", "감상 콘텐츠 전체"],
+  ["dialogue", "대화가 있는 장면"],
+  ["choices", "선택지가 있는 장면"],
+  ["pictures", "CG · 영상 장면"],
+  ["movies", "동영상 장면"],
   ["all", "모든 장면"],
   ["system", "시스템 / 자동 처리"],
 ]);
@@ -308,6 +334,30 @@ async function archiveSession() {
   c.archives = c.archives.slice(-12);
   await put("meta", "history:" + c.pkg.id, c.archives);
 }
+function duplicateChoice(rows){return new Promise(resolve=>{
+ const d=modal('이미 등록한 게임입니다');let result='cancel';
+ el('p',`${rows[0].title} · 같은 패키지 ${rows.length}개. 교체하면 기존 감상 상태를 유지합니다.`,d);
+ for(const [value,label] of [['replace','기존 게임 교체 · 저장 유지'],['keep','별도 버전으로 보관']])button(label,()=>{result=value;d.close();},d);
+ d.addEventListener('close',()=>resolve(result),{once:true});
+});}
+async function manageGames(){
+ const d=modal('게임 관리'),rows=await library();
+ if(!rows.length)el('p','등록된 게임이 없습니다.',d);
+ for(const row of rows){const box=el('article',null,d);el('h3',row.title,box);
+ const duplicates=rows.filter(x=>x.manifest.package_id===row.manifest.package_id).length;
+ el('p',`${row.manifest.engine} · ${row.created?.slice(0,10)||''} · ${row.maps}개 장소${duplicates>1?' · 같은 패키지 '+duplicates+'개':''}`,box);
+ const keep=el('label',null,box),check=input(keep,'감상 상태 보관','checkbox');check.checked=true;el('span','삭제 후에도 저장·번역·기록 보관 (동일 패키지 재등록 시 복원)',keep);
+ button('이 게임 삭제',async()=>{
+ const confirm=modal('게임을 삭제할까요?');el('p',`${row.title}의 등록 데이터와 연결 미디어를 삭제합니다. 원본 게임 폴더와 가져온 ZIP 파일은 삭제하지 않습니다.`,confirm);
+ button('삭제 확인',async()=>{
+ if(c.pkg?.id===row.id){stopAuto();textPlayer.stop();await archiveSession();}
+ await removeGame(row.id,{keepSaves:check.checked});confirm.close();d.close();
+ const left=await refreshGames();
+ if(c.pkg?.id===row.id){c.session=null;c.pkg=null;c.maps=[];c.events=[];c.currentMap=null;await clearPlayer();mapList.replaceChildren();eventList.replaceChildren();if(left.length)await load(left[0].id);else c.status('게임을 삭제했습니다. 새 게임을 추가하세요.');}
+ },confirm);
+ },box);
+ }
+}
 async function refreshGames() {
   const rows = await library();
   games.replaceChildren();
@@ -319,13 +369,14 @@ async function load(id) {
   textPlayer.stop();
   const m = await get("meta", id);
   c.pkg = new Package(m);
-  if(m.lazyArchive)c.status("대용량 ZIP 지연 로딩: 원본 ZIP을 보관하세요. 앱 재실행 후 다시 선택해야 합니다. 저장 상태는 유지됩니다.");
+  if(m.lazyArchive&&!m.nativeToken)c.status("대용량 ZIP 지연 로딩: 원본 ZIP을 보관하세요. 앱 재실행 후 다시 선택해야 합니다. 저장 상태는 유지됩니다.");
   c.session = null;
   c.index = null;
   c.infos.clear();
   c.events = [];
   c.currentMap = null;
   c.referenceIndex = [];
+  c.placeNames = (await get("meta", "place-names:"+id)) || {};
   c.maps = await c.pkg.json("normalized/maps.json");
   c.game = await c.pkg.json("normalized/game.json");
   c.world = migrateState(
@@ -373,18 +424,28 @@ async function clearPlayer() {
 function renderMaps() {
   mapList.replaceChildren();
   const query=globalSearch.value.toLowerCase();
-  const rows=c.maps.filter(m=>{const info=c.placeIndex?.[m.map_id];return (placeFilter.value==='all'||!info||info.uncertain||info.count>0)&&(!query||(info?.text||m.name||'').includes(query));});
+  const rows=c.maps.filter(m=>{const info=c.placeIndex?.[m.map_id];return (placeFilter.value==='all'||!info||info.uncertain||info.count>0)&&(!query||((info?.text||m.name||'')+' '+placeName(m,c.placeNames,c.text('map:'+m.map_id,m.name)).text).toLowerCase().includes(query));});
   if(!rows.length&&c.maps.length)el('p','감상 콘텐츠가 확인된 장소가 없습니다. 전체 장소 또는 다른 검색어를 확인하세요.',mapList);
-  for (const m of rows.slice(0,100)) {
+  let shown = 0;
+  const more = button("장소 더 보기", appendMaps, mapList);
+  function appendMaps() {
+  for (const m of rows.slice(shown, shown + 100)) {
     const b = button(
-      (c.text("map:" + m.map_id, m.name) || "이름 없는 장소")+` · ${c.placeIndex?.[m.map_id]?.count ?? "미확정"}장면${c.placeIndex?.[m.map_id]?.uncertain ? " · 분석 미확정" : ""}`,
+      placeName(m,c.placeNames,c.text("map:"+m.map_id,m.name)).text+` · ${c.placeIndex?.[m.map_id]?.count ?? "미확정"}장면${c.placeIndex?.[m.map_id]?.uncertain ? " · 분석 미확정" : ""}`,
       () => chooseMap(m),
       mapList,
     );
     b.classList.toggle("selected", m === c.currentMap);
     b.dataset.mapId = m.map_id;
+    const label=placeName(m,c.placeNames,c.text("map:"+m.map_id,m.name));
+    b.title=`${label.source} · 원문: ${label.raw}`;
   }
-  if(rows.length>100)el("p","검색으로 장소를 좁혀 주세요. 처음 100개를 표시합니다.",mapList);
+  shown += Math.min(100, rows.length - shown);
+  more.hidden = shown >= rows.length;
+  more.textContent = `장소 더 보기 · ${shown}/${rows.length}개 표시`;
+  mapList.append(more);
+  }
+  appendMaps();
   if (!c.maps.length) el("p", "게임을 먼저 선택하세요.", mapList);
 }
 async function common(id) {
@@ -400,6 +461,8 @@ async function chooseMap(m) {
   for (const e of c.events) {
     const entries = await Promise.all(e.pages.map((p) => classify(p, common)));
     const info = {
+      entries,
+      dialogue:entries.some(x=>x.dialogue),choices:entries.some(x=>x.choices),pictures:entries.some(x=>x.pictures),movies:entries.some(x=>x.movies),
       content: entries.some((x) => x.content),
       category:
         entries.find((x) => x.content)?.category ||
@@ -425,8 +488,8 @@ async function renderEvents() {
         .includes(search) ||
       c.currentMap.name?.toLowerCase().includes(search),
   );
-  if (eventFilter.value === "content")
-    rows = rows.filter((e) => c.infos.get(e.id)?.content);
+  if (["content","dialogue","choices","pictures","movies"].includes(eventFilter.value))
+    rows = rows.filter((e) => c.infos.get(e.id)?.[eventFilter.value]);
   if(!rows.length)el("p","이 장소에 검색 조건과 맞는 장면이 없습니다. 검색어를 지우거나 전체 이벤트를 확인하세요.",eventList);
   if (eventFilter.value === "system")
     rows = rows.filter((e) => !c.infos.get(e.id)?.content);
@@ -446,6 +509,9 @@ async function renderEvents() {
             : null),
       );
       el("strong", name, row);
+      const first=info.texts.find(t=>typeof t.text==='string'&&t.text.trim());
+      if(first)el('p','미리보기: '+first.text.slice(0,160),row,'scene-preview');
+      el('small',`${info.dialogue?'대화 · ':''}${info.choices?'선택지 · ':''}${info.pictures?'CG/영상 · ':''}감상 가능한 상황 ${info.entries.filter(x=>x.content).length}개`,row);
       const ctx = { map: c.currentMap.map_id, event: e.source.event_id },
         active = selectPage(e, c.world, ctx);
       el(
@@ -454,7 +520,7 @@ async function renderEvents() {
         row,
       );
       button("감상하기", () => watch(e), row, "primary");
-      button("상황 선택", () => { if(mode!=="story") return conditionDialog(e); const d=modal("감상할 상황 선택");e.pages.forEach((p,i)=>button(`페이지 ${i+1}`,async()=>{d.close();await start(e,i,clone(c.world),true,["페이지 직접 감상 · 도달 가능성 미확정"]);},d)); }, row, "subtle");
+      button("상황 선택", () => { if(mode!=="story") return conditionDialog(e); const d=modal("감상할 상황 선택");e.pages.forEach((p,i)=>button(`상황 ${i+1} · ${c.infos.get(e.id)?.entries[i]?.category||"미분류"}${c.infos.get(e.id)?.entries[i]?.content?"":" · 감상 콘텐츠 없음"}`,async()=>{d.close();await start(e,i,clone(c.world),true,["페이지 직접 감상 · 도달 가능성 미확정"]);},d)); }, row, "subtle");
       details(row, "고급 · 원본 식별 정보", {
         map: c.currentMap.map_id,
         event: e.id,
@@ -477,7 +543,7 @@ async function renderEvents() {
 }
 async function watch(e) {
   if (mode === "story") {
- const index=e.pages.findIndex((p)=>p.commands.some(x=>[101,401,105,405,102,231,261,117].includes(x.raw.code)));
+ const index=c.infos.get(e.id)?.entries.findIndex(x=>x.content) ?? -1;
  return start(e, Math.max(0,index),clone(c.world),true,["정적 감상: 세계 상태를 변경하지 않습니다. 조건은 경로를 직접 선택합니다."]);
  }
   const ctx = { map: c.currentMap.map_id, event: e.source.event_id },
@@ -938,9 +1004,10 @@ function setMobile(v) {
 }
 gameFile.onchange = async () => {
   try {
+    stopAuto();await archiveSession();
     status.classList.remove("error");
     const p = await importZip(gameFile.files[0], (n, t) =>
-      c.status(`게임 자료 읽는 중 ${n}/${t}`),
+      c.status(`게임 자료 읽는 중 ${n}/${t}`), undefined, {onDuplicate:duplicateChoice}
     );
     await refreshGames();
     await load(p.id);

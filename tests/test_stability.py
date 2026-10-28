@@ -102,3 +102,12 @@ def test_streaming_cancel_and_full_validator_equivalence(exported):
 def test_final_status_mismatch_rejected(exported):
  _,_,out,_=exported;r=load_json(out/'report.json');r['data']['state']='failed';write_json(out/'report.json',r)
  assert any('상태 불일치' in e['message'] for e in validate_package(out,only=['manifest.json','report.json']))
+
+def test_viewing_package_includes_media_without_nested_archives(tmp_path):
+ root,_=create_game(tmp_path/'game','MZ')
+ r=Extractor(Options.story()).run(root,tmp_path/'out');out=Path(r['output_folder'])
+ with zipfile.ZipFile(out/'Game.zip') as z:
+  names=z.namelist()
+  assert 'manifest.json' in names and any(n.startswith('assets/images/') and n.endswith('.png') for n in names)
+  assert not any(n.endswith('.zip') for n in names)
+  assert not any(n.startswith(('source_archive/','llm_input/')) for n in names)

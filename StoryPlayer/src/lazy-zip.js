@@ -9,3 +9,5 @@ export async function readEntry(entry,limit){
 }
 export async function lazyFile(id,path,limit){const e=mounts.get(id)?.entries.get(path);return e?readEntry(e,limit):null;}
 export async function lazyResource(id,logical){const e=resources.get(id)?.get(logical);return e?readEntry(e,128*1024**2):null;}
+
+export async function unmount(id){const m=mounts.get(id);mounts.delete(id);resources.delete(id);if(m)await m.zip.close();}

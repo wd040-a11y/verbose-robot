@@ -111,6 +111,32 @@ try{
  await fs.mkdir('reports' ,{recursive:true});
  if(process.env.PLAYER_LARGE)await fs.writeFile('reports/large-zip-gui.json',JSON.stringify({passed:true,mode,archiveBytes:(await fs.stat('.large-test/large.zip')).size,checks:['real ZIP64 file input','map and event JSON after 2GiB offset','dialogue and choices','separate media connection'],realGame:false},null,2));
  await page.screenshot({path:`reports/integrated-${mode}.png`,fullPage:true});
+ // User-level library workflow: duplicate replacement, then confirmed deletion.
+ await page.locator('input[type=file]').first().setInputFiles(path.resolve('fixtures/sample.zip'));
+ await expect(page.getByRole('dialog')).toContainText('이미 등록한 게임');
+ await page.getByRole('button',{name:'기존 게임 교체 · 저장 유지',exact:true}).click();
+ await expect(page.getByLabel('등록된 게임').locator('option')).toHaveCount(1);
+ await page.getByRole('button',{name:'게임 관리',exact:true}).click();
+ await page.getByRole('button',{name:'이 게임 삭제',exact:true}).click();
+ await page.getByRole('button',{name:'삭제 확인',exact:true}).click();
+ await expect(page.getByLabel('등록된 게임').locator('option')).toHaveCount(0);
+ if(mode==='electron'){
+  await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},path.resolve('fixtures/native-game'));
+  await page.getByRole('button',{name:'게임 폴더 열기',exact:true}).click();
+  await expect(page.getByRole('button',{name:/시작 마을/})).toBeVisible({timeout:120000});
+  await page.getByLabel('감상 모드').selectOption('story');
+  await page.getByRole('button',{name:/시작 마을/}).click();
+  await page.locator('article').filter({hasText:'표지판 또는 NPC 1'}).getByRole('button',{name:'감상하기',exact:true}).click();
+  await expect(page.locator('.dialogue')).toContainText('폴더에서 바로 감상');
+  await expect(page.locator('.picture-layer img')).toBeVisible();
+  await page.reload();
+  await page.getByRole('button',{name:/시작 마을/}).click();
+  await page.locator('article').filter({hasText:'표지판 또는 NPC 1'}).getByRole('button',{name:'감상하기',exact:true}).click();
+  await expect(page.locator('.picture-layer img')).toBeVisible();
+  await page.screenshot({path:'reports/folder-import.png',fullPage:true});
+  await fs.writeFile('reports/folder-import.json',JSON.stringify({passed:true,synthetic:true,checks:['bundled importer','folder picker','automatic extraction','CG without separate ZIP','reload without ZIP reselection']},null,2));
+ }
+ await fs.writeFile(`reports/library-${mode}.json`,JSON.stringify({passed:true,synthetic:true,checks:['duplicate replacement','one library entry','confirmed deletion']},null,2));
  if(errors.length)throw Error(errors.join('\n'));
  await fs.writeFile(`reports/gui-${mode}.json`,JSON.stringify({passed:true,mode,checks:['package import','static dialogue','separate branch boundaries','choices','existing interpreter dialogue','resource ZIP counts','static CG decoded and visible','package access audit'],realGame:false},null,2));
 }finally{await app?.close();await browser?.close();}

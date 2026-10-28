@@ -161,7 +161,7 @@ class MainWindow(QMainWindow):
                     status='일부 실패' if counts.get('failed',0)+counts.get('unsupported_encryption',0) else '옵션 제외 포함' if counts.get('copy_disabled',0)+counts.get('decryption_disabled',0) else '처리 완료' if counts else '발견 없음'
                     labels.append(label+': '+status)
                 story='확인 필요' if any(x['severity']=='error' and x['code'] not in ('key_missing','header_mismatch','truncated_file','restored_format_invalid','corrupt_media','io_failed','access_denied','source_missing') for x in load_json(self.last_output/'reports/warnings.json')['data']) else '데이터·무결성 확인'
-                self.status.setText(self.status.text()+'\n스토리: '+story+' / '+' / '.join(labels)+'\nStory.zip: 재생기용 · assets/: 별도 미디어 · reports/: 진단')
+                self.status.setText(self.status.text()+'\n스토리: '+story+' / '+' / '.join(labels)+'\nGame.zip 하나를 재생기에 등록하세요 (CG·영상 포함) · Story.zip: 미디어 없는 호환용 · reports/: 진단')
             except (OSError,ValueError,KeyError):pass
             self.log.appendPlainText(self.status.text())
             try:

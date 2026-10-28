@@ -8,6 +8,7 @@ export async function classify(
     dialogue: false,
     choices: false,
     pictures: false,
+    movies: false,
     transfer: false,
     state: false,
     system: false,
@@ -27,7 +28,8 @@ export async function classify(
       result.choices = true;
       result.texts.push({ id: cmd.id, choices: p[0], indent: cmd.raw.indent });
     }
-    if ([231,261].includes(code)) result.pictures = true;
+    if (code===231 && typeof p[1]==='string' && p[1].trim()) result.pictures=true;
+    if (code===261 && typeof p[0]==='string' && p[0].trim()) {result.pictures=true;result.movies=true;}
     if (code === 201) result.transfer = true;
     if ([121, 122, 123, 125, 126, 127, 128, 129, 205, 211, 322].includes(code))
       result.state = true;
@@ -72,6 +74,7 @@ export async function classify(
         "dialogue",
         "choices",
         "pictures",
+        "movies",
         "transfer",
         "state",
         "system",

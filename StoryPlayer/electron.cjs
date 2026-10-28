@@ -8,8 +8,10 @@ app.whenReady().then(() => {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      preload: path.join(__dirname,"preload.cjs"),
     },
   });
+  require("./native-import.cjs")(win);
   win.setMenu(null);
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event) => event.preventDefault());

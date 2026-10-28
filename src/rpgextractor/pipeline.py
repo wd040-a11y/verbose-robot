@@ -37,7 +37,7 @@ class Options:
 
     @classmethod
     def story(cls):
-        return cls(raw_json=False,plugin_sources=False,llm=False,detailed_reports=False,story_zip=True)
+        return cls(raw_json=False,plugin_sources=False,llm=False,detailed_reports=False,story_zip=True,movies=True,audio=True)
 
 COUNT_KEYS=("maps","events","pages","commands","common_events","troops","dialogue_commands","choice_commands")
 
@@ -283,6 +283,9 @@ class Extractor:
                     self.emit("Story.zip 생성",0,1)
                     archive=story_package(self.output,self.cancel)
                     measure["files"]=1;measure["bytes"]=archive.stat().st_size
+                    self.emit("CG 포함 Game.zip 생성",0,1)
+                    game_archive=story_package(self.output,self.cancel,media=True)
+                    measure["files"]+=1;measure["bytes"]+=game_archive.stat().st_size
         except Cancelled:
             self.schema_valid=False
             self.state="cancelled"
