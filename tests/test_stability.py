@@ -63,7 +63,7 @@ def test_key_missing_retry_and_source_preservation(tmp_path):
  retry=retry_resources(out,root);assert any(x['status']=='decrypted' for x in retry['files'])
  with zipfile.ZipFile(Path(retry['output_folder'])/'ResourcesRetry.zip') as z:assert 'img/pictures/scene.png' in z.namelist()
  assert before=={str(p):digest(p) for p in out.rglob('*') if p.is_file()}
- assert KEY not in (Path(retry['output_folder'])/'retry-report.json').read_text()
+ assert KEY not in (Path(retry['output_folder'])/'retry-report.json').read_text(encoding="utf-8")
 
 @pytest.mark.parametrize('data,code',[(HEADER+b'x','truncated_file'),(b'not-standard'+bytes(50),'header_mismatch'),(HEADER+bytes(32),'restored_format_invalid')])
 def test_decryption_reason(tmp_path,data,code):
@@ -83,7 +83,7 @@ def test_streaming_cancel_and_full_validator_equivalence(exported):
  # Streaming test does not accumulate a huge decoded document; cancellation
  # interrupts the line loop rather than waiting for the entire file.
  p=out/'normalized/large.jsonl'
- with p.open('w') as f:
+ with p.open('w',encoding='utf-8') as f:
   for _ in range(20000):f.write(json.dumps(row)+'\n')
  calls=0;seen=[]
  def cancel():
@@ -92,8 +92,8 @@ def test_streaming_cancel_and_full_validator_equivalence(exported):
   if calls>600:raise Cancelled()
  with pytest.raises(Cancelled):validate_package(out,cancel=cancel,only=['normalized/large.jsonl'],progress=lambda *x:seen.append(x))
  assert seen and calls==601
- row=json.loads((out/"normalized/text_index.jsonl").read_text().splitlines()[0])
- with p.open("w") as f:
+ row=json.loads((out/"normalized/text_index.jsonl").read_text(encoding="utf-8").splitlines()[0])
+ with p.open("w",encoding="utf-8") as f:
   for _ in range(10000):f.write(json.dumps(row)+"\n")
  stats={}
  assert not validate_package(out,only=["normalized/large.jsonl"],stats=stats)
