@@ -124,6 +124,8 @@ try{
  await page.locator('input[type=file]').first().setInputFiles(path.resolve('fixtures/sample.zip'));
  await expect(page.getByRole('dialog')).toContainText('이미 등록한 게임');
  await page.getByRole('button',{name:'기존 게임 교체 · 저장 유지',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.locator('.status')).toContainText('자유롭게 장소를 선택하세요');
  await expect(page.getByLabel('등록된 게임').locator('option')).toHaveCount(1);
  await page.getByRole('button',{name:'게임 관리',exact:true}).click();
  await page.getByRole('button',{name:'이 게임 삭제',exact:true}).click();
@@ -149,4 +151,9 @@ try{
  await fs.writeFile(`reports/library-${mode}.json`,JSON.stringify({passed:true,synthetic:true,checks:['duplicate replacement','one library entry','confirmed deletion']},null,2));
  if(errors.length)throw Error(errors.join('\n'));
  await fs.writeFile(`reports/gui-${mode}.json`,JSON.stringify({passed:true,mode,checks:['package import','static dialogue','separate branch boundaries','choices','existing interpreter dialogue','resource ZIP counts','static CG decoded and visible','package access audit'],realGame:false},null,2));
+}catch(error){
+ await fs.mkdir('reports',{recursive:true});
+ await page.screenshot({path:`reports/failure-${mode}.png`,fullPage:true}).catch(()=>{});
+ console.log('GUI failure state',await page.locator('body').innerText(), 'page errors',errors);
+ throw error;
 }finally{await app?.close();await browser?.close();}
