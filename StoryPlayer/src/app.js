@@ -71,7 +71,7 @@ gameFile.accept = ".zip,application/zip";
 const games = select(top, "등록된 게임", []);
 if(window.localGames){
  window.localGames.progress(p=>c.status(`${p.stage} · ${p.current}/${p.total} · 오류 ${p.errors}`));
- button('게임 폴더 열기',async()=>{
+ button('게임 폴더 열기',()=>importOperation(async()=>{
   stopAuto();await archiveSession();
   let result=await window.localGames.importFolder();
   if(result?.candidates){const chosen=await new Promise(resolve=>{const d=modal('여러 게임 자료를 찾았습니다');let value=null;result.candidates.forEach((x,i)=>button(`${x.name} · ${x.engine} · 맵 ${x.maps}개 · ${x.path}`,()=>{value=i;d.close();},d));d.addEventListener('close',()=>resolve(value),{once:true});});if(chosen===null)return;result=await window.localGames.importFolder(chosen);}
@@ -79,7 +79,7 @@ if(window.localGames){
   const pkg=await importZip(nativePackage(result),(n,t)=>c.status(`감상 준비 ${n}/${t}`),undefined,{onDuplicate:duplicateChoice});
   await refreshGames();await load(pkg.id);
   if(result.report.asset_failures)c.status(`감상 준비 완료 · 미디어 ${result.report.asset_failures}개 처리 실패. 가능한 대사는 감상할 수 있습니다. 리소스 화면에서 확인하세요.`);
- },top);
+ }),top);
 }
 button("게임 관리", manageGames, top);
 button("콘텐츠 접근성 검사",()=>c.pkg && inspectPackage(c.pkg),top);
@@ -1002,7 +1002,15 @@ function setMobile(v) {
   layout.dataset.mobile = v;
   if(matchMedia("(max-width: 850px)").matches) layout.scrollIntoView({block:"start"});
 }
-gameFile.onchange = async () => {
+let importBusy=false;
+async function importOperation(action){
+ if(importBusy)return;
+ importBusy=true;
+ const controls=[...top.querySelectorAll('button,input,select')];
+ controls.forEach(x=>x.disabled=true);
+ try{return await action();}finally{importBusy=false;controls.forEach(x=>x.disabled=false);gameFile.value='';}
+}
+gameFile.onchange = () => importOperation(async () => {
   try {
     stopAuto();await archiveSession();
     status.classList.remove("error");
@@ -1020,7 +1028,7 @@ gameFile.onchange = async () => {
   } finally {
     gameFile.value = "";
   }
-};
+});
 games.onchange = () => load(games.value).catch((e) => c.error(e.message));
 langSelect.onchange = async () => {
   language = langSelect.value;

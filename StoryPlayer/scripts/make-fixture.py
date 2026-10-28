@@ -49,3 +49,17 @@ native,_=create_game(out/'native-game','MZ')
 m=json.loads((native/'data/Map001.json').read_text(encoding='utf-8'))
 m['events'][1]['pages']=[page([cmd(231,1,'scene',0,0,0,0,100,100,255,0),cmd(401,'폴더에서 바로 감상'),cmd(0)])]
 write(native/'data/Map001.json',m)
+
+# More than 100 real map records for no-search navigation regression.
+with tempfile.TemporaryDirectory() as temp:
+ nav_game,_=create_game(Path(temp)/'navigation','MZ')
+ template=json.loads((nav_game/'data/Map002.json').read_text(encoding='utf-8'))
+ infos=json.loads((nav_game/'data/MapInfos.json').read_text(encoding='utf-8'))
+ for i in range(3,106):
+  write(nav_game/f'data/Map{i:03}.json',template)
+  infos.append({'id':i,'name':f'탐색 장소 {i}','parentId':0,'order':i})
+ write(nav_game/'data/MapInfos.json',infos)
+ from rpgextractor.pipeline import Options
+ import shutil
+ nav_result=Extractor(Options.story()).run(nav_game,Path(temp)/'export')
+ shutil.copyfile(Path(nav_result['output_folder'])/'Game.zip',out/'navigation.zip')

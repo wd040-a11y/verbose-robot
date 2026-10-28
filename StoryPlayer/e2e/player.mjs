@@ -131,6 +131,12 @@ try{
  await page.getByRole('button',{name:'이 게임 삭제',exact:true}).click();
  await page.getByRole('button',{name:'삭제 확인',exact:true}).click();
  await expect(page.getByLabel('등록된 게임').locator('option')).toHaveCount(0);
+ await page.locator('input[type=file]').first().setInputFiles(path.resolve('fixtures/navigation.zip'));
+ await expect(page.getByRole('button',{name:/장소 더 보기/})).toBeVisible();
+ await page.getByRole('button',{name:/장소 더 보기/}).click();
+ await page.getByRole('button',{name:/탐색 장소 105/}).click();
+ await expect(page.locator('article').filter({hasText:'엔딩'})).toBeVisible();
+ await fs.writeFile(`reports/navigation-${mode}.json`,JSON.stringify({passed:true,synthetic:true,maps:105,withoutSearch:true},null,2));
  if(mode==='electron'){
   await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},path.resolve('fixtures/native-game'));
   await page.getByRole('button',{name:'게임 폴더 열기',exact:true}).click();
