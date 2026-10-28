@@ -79,8 +79,8 @@ try{
  await advanceToGreeting();
  if(mode!=='electron'){
   await page.setViewportSize({width:390,height:844});
-  await page.getByLabel('감상 모드').selectOption('story');
   await page.locator('.mobile-nav').getByRole('button',{name:'장소',exact:true}).click();
+  await page.getByLabel('감상 모드').selectOption('story');
   await page.getByRole('button',{name:/시작 마을/}).click();
   await expect(page.locator('.explorer')).toHaveAttribute('data-mobile','장면');
   await npc.getByRole('button',{name:'감상하기',exact:true}).click();
