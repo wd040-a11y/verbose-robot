@@ -81,7 +81,7 @@ export class Dialogue {
           if (gen !== this.generation) return;
           span.textContent += char;
           if (char === "\n") lineFast = false;
-          if (!this.fast && !lineFast) await delay(16);
+          if (!this.fast && !lineFast) await delay(8);
         }
       } else
         switch (t.code) {

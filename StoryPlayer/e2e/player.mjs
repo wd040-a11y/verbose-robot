@@ -51,10 +51,16 @@ try{
  const cgOnly=page.locator('article').filter({hasText:'CG 전용'});
  await cgOnly.getByRole('button',{name:'감상하기',exact:true}).click();
  await expect(page.locator('.picture-layer img')).toHaveCount(1);
+ await fs.mkdir('reports',{recursive:true});
+ await page.screenshot({path:`reports/cg-only-${mode}.png`});
+ const cgPixels=await page.locator('.scene').screenshot();
+ const imageBox=await page.locator('.picture-layer img').boundingBox(), sceneBox=await page.locator('.scene').boundingBox();
+ if(imageBox.width>sceneBox.width+1||imageBox.height>sceneBox.height+1)throw Error('CG exceeds scene bounds');
  await page.getByRole('button',{name:'다음',exact:true}).click();
  await expect(page.getByText(/장면 감상 완료/)).toBeVisible();
  await page.getByRole('button',{name:'이전',exact:true}).click();
  await expect(page.locator('.picture-layer img')).toHaveCount(1);
+ if(!cgPixels.equals(await page.locator('.scene').screenshot()))throw Error('CG rewind pixel regression');
  const movieEvent=page.locator('article').filter({hasText:'영상 검증'});
  await movieEvent.getByRole('button',{name:'감상하기',exact:true}).click();
  await page.getByRole('button',{name:'동영상 재생',exact:true}).click();
@@ -80,6 +86,9 @@ try{
   await npc.getByRole('button',{name:'감상하기',exact:true}).click();
   await expect(page.locator('.explorer')).toHaveAttribute('data-mobile','재생');
   await advanceToGreeting();
+  const bar=await page.locator('.playbar').boundingBox();
+  if(bar.y+bar.height>844)throw Error('Mobile controls outside viewport');
+  await expect(page.locator('.playbar button').first()).toHaveCSS('touch-action','manipulation');
  }
  await fs.mkdir('reports' ,{recursive:true});
  if(process.env.PLAYER_LARGE)await fs.writeFile('reports/large-zip-gui.json',JSON.stringify({passed:true,mode,archiveBytes:(await fs.stat('.large-test/large.zip')).size,checks:['real ZIP64 file input','map and event JSON after 2GiB offset','dialogue and choices','separate media connection'],realGame:false},null,2));

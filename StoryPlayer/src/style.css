@@ -563,3 +563,13 @@ section > input {
 button { touch-action: manipulation; }
 .focused-picture {width:100%;height:100%;object-fit:contain;display:block;}
 .cg-focus .picture-layer {position:relative;}
+/* On a phone, playback occupies one viewport; navigation restores setup. */
+@media (max-width:850px) {
+  #app:has(.screen:not([hidden]) .explorer[data-mobile="재생"]) > header,
+  #app:has(.screen:not([hidden]) .explorer[data-mobile="재생"]) > .status,
+  #app:has(.screen:not([hidden]) .explorer[data-mobile="재생"]) > .mode-help,
+  #app:has(.screen:not([hidden]) .explorer[data-mobile="재생"]) > .main-nav,
+  .screen:has(.explorer[data-mobile="재생"]) > .explore-filters {display:none;}
+  .explorer[data-mobile="재생"] .viewer {height:calc(100dvh - 80px - env(safe-area-inset-bottom));min-height:0;max-height:none;padding:12px;}
+  .scene {height:auto;max-height:40dvh;min-height:70px;}
+}
