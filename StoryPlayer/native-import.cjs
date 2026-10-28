@@ -20,7 +20,7 @@ module.exports=function install(win){
    const args=['--input',pending,'--output',job,'--result',result,'--progress',progress];if(candidate!==undefined)args.push('--candidate',String(candidate));
    let timer=setInterval(async()=>{try{const v=JSON.parse(await fs.readFile(progress,'utf8'));if(!win.isDestroyed())win.webContents.send('game:progress',v);}catch{}},250);
    try{await new Promise((resolve,reject)=>{const child=spawn(exe,args,{windowsHide:true,stdio:'ignore',shell:false});child.once('error',()=>reject(Error('게임 가져오기 구성 요소를 실행하지 못했습니다. 전체 배포본을 사용하세요.')));child.once('exit',()=>resolve());});}finally{clearInterval(timer);}
-   const data=JSON.parse(await fs.readFile(result,'utf8'));if(data.error)throw Error(data.error);if(data.candidates)return data;
+   const data=JSON.parse(await fs.readFile(result,'utf8'));if(data.error)throw Error(data.error+(data.issues?.length?' · '+data.issues.map(x=>x.code+': '+x.message).join(' / '):''));if(data.candidates)return data;
    const archive=path.resolve(data.archive);if(!archive.startsWith(path.resolve(job)+path.sep))throw Error('결과 경로 오류');
    const token=crypto.randomUUID();registry[token]=archive;await fs.writeFile(registryPath,JSON.stringify(registry));pending=null;
    return {...await descriptor(token),report:data.report};

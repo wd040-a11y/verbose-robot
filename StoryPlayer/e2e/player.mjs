@@ -160,6 +160,7 @@ try{
 }catch(error){
  await fs.mkdir('reports',{recursive:true});
  await page.screenshot({path:`reports/failure-${mode}.png`,fullPage:true}).catch(()=>{});
+ if(app)try{const backend=await app.evaluate(async({app})=>{const fs=require('node:fs/promises'),path=require('node:path');const root=path.join(app.getPath('userData'),'game-imports');const found=[];async function walk(dir){for(const e of await fs.readdir(dir,{withFileTypes:true})){const f=path.join(dir,e.name);if(e.isDirectory())await walk(f);else if(['result.json','report.json','warnings.json'].includes(e.name))found.push({file:f,data:JSON.parse(await fs.readFile(f,'utf8'))});}}await walk(root);return found;});await fs.writeFile('reports/import-failure.json',JSON.stringify(backend,null,2));console.log('Import diagnostics',JSON.stringify(backend));}catch{}
  console.log('GUI failure state',await page.locator('body').innerText(), 'page errors',errors);
  throw error;
 }finally{await app?.close();await browser?.close();}
