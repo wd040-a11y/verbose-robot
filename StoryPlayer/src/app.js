@@ -486,7 +486,7 @@ async function renderEvents() {
       JSON.stringify([e.raw_metadata.name, c.infos.get(e.id)?.texts])
         .toLowerCase()
         .includes(search) ||
-      c.currentMap.name?.toLowerCase().includes(search),
+      placeName(c.currentMap,c.placeNames,c.text("map:"+c.currentMap.map_id,c.currentMap.name)).text.toLowerCase().includes(search),
   );
   if (["content","dialogue","choices","pictures","movies"].includes(eventFilter.value))
     rows = rows.filter((e) => c.infos.get(e.id)?.[eventFilter.value]);

@@ -111,6 +111,15 @@ try{
  await fs.mkdir('reports' ,{recursive:true});
  if(process.env.PLAYER_LARGE)await fs.writeFile('reports/large-zip-gui.json',JSON.stringify({passed:true,mode,archiveBytes:(await fs.stat('.large-test/large.zip')).size,checks:['real ZIP64 file input','map and event JSON after 2GiB offset','dialogue and choices','separate media connection'],realGame:false},null,2));
  await page.screenshot({path:`reports/integrated-${mode}.png`,fullPage:true});
+ // A Korean alias must find both the location and its scenes.
+ if(mode!=='electron')await page.locator('.mobile-nav').getByRole('button',{name:'장소',exact:true}).click();
+ await page.getByRole('button',{name:'장소 이름 바꾸기',exact:true}).click();
+ await page.getByLabel('표시할 장소 이름').fill('우리 마을');
+ await page.getByRole('dialog').getByRole('button',{name:'저장',exact:true}).click();
+ await page.getByLabel('게임 전체 장소 / 인물 / 대사 검색').fill('우리 마을');
+ await expect(page.getByRole('button',{name:/우리 마을/})).toBeAttached();
+ await expect(page.locator('article').filter({hasText:'안내 NPC'})).toBeAttached();
+ await page.getByLabel('게임 전체 장소 / 인물 / 대사 검색').fill('');
  // User-level library workflow: duplicate replacement, then confirmed deletion.
  await page.locator('input[type=file]').first().setInputFiles(path.resolve('fixtures/sample.zip'));
  await expect(page.getByRole('dialog')).toContainText('이미 등록한 게임');
@@ -129,12 +138,13 @@ try{
   await page.locator('article').filter({hasText:'표지판 또는 NPC 1'}).getByRole('button',{name:'감상하기',exact:true}).click();
   await expect(page.locator('.dialogue')).toContainText('폴더에서 바로 감상');
   await expect(page.locator('.picture-layer img')).toBeVisible();
-  await page.reload();
+  await app.close();
+  app=await _electron.launch({executablePath:path.resolve(process.env.PLAYER_EXE)});page=await app.firstWindow();page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));
   await page.getByRole('button',{name:/시작 마을/}).click();
   await page.locator('article').filter({hasText:'표지판 또는 NPC 1'}).getByRole('button',{name:'감상하기',exact:true}).click();
   await expect(page.locator('.picture-layer img')).toBeVisible();
   await page.screenshot({path:'reports/folder-import.png',fullPage:true});
-  await fs.writeFile('reports/folder-import.json',JSON.stringify({passed:true,synthetic:true,checks:['bundled importer','folder picker','automatic extraction','CG without separate ZIP','reload without ZIP reselection']},null,2));
+  await fs.writeFile('reports/folder-import.json',JSON.stringify({passed:true,synthetic:true,checks:['bundled importer','folder picker','automatic extraction','CG without separate ZIP','process restart without ZIP reselection']},null,2));
  }
  await fs.writeFile(`reports/library-${mode}.json`,JSON.stringify({passed:true,synthetic:true,checks:['duplicate replacement','one library entry','confirmed deletion']},null,2));
  if(errors.length)throw Error(errors.join('\n'));
