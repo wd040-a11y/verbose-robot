@@ -61,7 +61,7 @@ export class SceneRenderer {
       if (image) e.alt = p.name;
       else
         e.textContent = `그림 ${id}: ${p.name} — 리소스 미등록 (이벤트 계속 실행)`;
-      if(this.focused&&image){e.className="focused-picture";this.scene.style.aspectRatio=`${image.naturalWidth}/${image.naturalHeight}`;}
+      if(this.focused&&image){e.className="focused-picture";e.style.opacity=String((p.opacity??255)/255);this.scene.style.aspectRatio=`${image.naturalWidth}/${image.naturalHeight}`;}
       else {Object.assign(e.style,pictureStyle(p));this.scene.style.aspectRatio=`${this.width}/${this.height}`;}
       e.style.zIndex = id;
       this.layer.append(e);
