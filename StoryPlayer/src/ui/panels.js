@@ -418,9 +418,10 @@ export async function resourcesPanel(parent, c) {
   if (report) {
     el(
       "p",
-      `검사 ${report.scanned}개 · 정상 연결 ${report.matched}개 · 참조 없음 ${report.noReference}개 · 형식 오류 ${report.invalid}개 · 모호 ${report.ambiguous}개`,
+      `검사 ${report.scanned}개 · 정상 연결 ${report.matched-(report.files?.filter(x=>x.status==='linked_unverified').length||0)}개 · 참조 없음 ${report.noReference}개 · 형식 오류 ${report.invalid}개 · 모호 ${report.ambiguous}개`,
       parent,
     );
+    if(report.files?.some(x=>x.status==='linked_unverified'))el("p","대용량 ZIP은 필요한 순간에 파일 형식과 무결성을 검사합니다. 연결 대기: "+report.files.filter(x=>x.status==='linked_unverified').length+"개. 재실행 후 ZIP을 다시 연결하세요.",parent);
     details(
       parent,
       "연결되지 않은 파일의 이유",

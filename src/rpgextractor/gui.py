@@ -1,5 +1,6 @@
 from __future__ import annotations
 import sys
+import zipfile
 import os
 import threading
 from pathlib import Path
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBo
 from .discovery import discover
 from .pipeline import Extractor, Options
 from .io import Cancelled, load_json
+from .packaging import story_package
 
 class Worker(QObject):
     progress=Signal(str,int,int,int)
@@ -26,6 +28,12 @@ class Worker(QObject):
                 result=discover(self.folder,(),cancel)
             else:
                 result=Extractor(self.options,self.progress.emit,self.stop.is_set).run(self.folder,self.output,self.candidate)
+                if result["output_counts"]["maps"] and result["output_counts"]["events"]:
+                    try:
+                        self.progress.emit("경량 Story.zip 생성",0,1,0)
+                        story_package(result["output_folder"],cancel)
+                    except (OSError,Cancelled,zipfile.BadZipFile) as exc:
+                        result["package_warning"]="Story.zip 생성 실패: "+str(exc)+". 추출 폴더는 보존됩니다."
             self.finished.emit(result)
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -130,6 +138,7 @@ class MainWindow(QMainWindow):
             self.status.setText(f"데이터 루트 {len(result)}개 발견. 여러 개이면 목록에서 선택하세요." if result else "지원 데이터 루트를 찾지 못했습니다. data 폴더/엔진 파일을 확인하세요.")
             self.bar.setRange(0,100); self.bar.setValue(100)
         else:
+            if result.get("package_warning"): self.log.appendPlainText(result["package_warning"])
             self.last_output=Path(result["output_folder"]); self.open.setEnabled(True)
             counts=result["output_counts"]; state={"complete":"완료","complete_with_issues":"완료 (경고 확인)","partial":"부분 추출 (오류 확인)","cancelled":"취소됨","invalid":"검증 실패","failed":"추출 실패"}.get(result["state"],result["state"])
             self.status.setText(f"{state} · 맵 {counts['maps']:,} · 이벤트 {counts['events']:,} · 명령 {counts['commands']:,}\n스위치 {result['switches']:,} · 변수 {result['variables']:,} · 이미지 {result['images']:,} · 복원 {result['decrypted']:,} · 실패 {result['asset_failures']:,} · 플러그인 {result['plugins']:,}\n오류 {result['errors']:,} · 경고 {result['warnings']:,} · report.json을 확인하세요.")
@@ -163,3 +172,4 @@ def main():
     window=MainWindow(); window.show(); return app.exec()
 
 if __name__=="__main__": raise SystemExit(main())
+

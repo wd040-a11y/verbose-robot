@@ -319,6 +319,7 @@ async function load(id) {
   textPlayer.stop();
   const m = await get("meta", id);
   c.pkg = new Package(m);
+  if(m.lazyArchive)c.status("대용량 ZIP 지연 로딩: 원본 ZIP을 보관하세요. 앱 재실행 후 다시 선택해야 합니다. 저장 상태는 유지됩니다.");
   c.session = null;
   c.index = null;
   c.infos.clear();

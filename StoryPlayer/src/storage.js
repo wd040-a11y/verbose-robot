@@ -1,3 +1,4 @@
+import {mountZip,mountResource,lazyFile,lazyResource,readEntry} from './lazy-zip.js';
 import {
   resourceIndex,
   resolveResource,
@@ -73,8 +74,8 @@ export class Package {
   async json(path) {
     if (!safe(path)) throw Error("안전하지 않은 참조");
     if (this.cache.has(path)) return this.cache.get(path);
-    const b = await get("files", this.id + "/" + path);
-    if (!b) throw Error("파일 누락: " + path);
+    const b = (await get("files", this.id + "/" + path)) || await lazyFile(this.id,path,32*1024**2);
+    if (!b) throw Error(this.lazyArchive ? "지연 로딩 ZIP을 다시 선택해 주세요. 원본 ZIP은 저장소에 복사하지 않았습니다: "+path : "파일 누락: " + path);
     if (b.size > 32 * 1024 * 1024) throw Error("JSON 한도 32 MiB");
     const v = JSON.parse(await b.text());
     if (!validate(v)) throw Error("패키지 스키마 검증 실패: " + path);
@@ -91,7 +92,7 @@ export class Package {
   }
   async source(path) {
     if (!safe(path)) return null;
-    const b = await get("files", this.id + "/" + path);
+    const b = (await get("files", this.id + "/" + path)) || await lazyFile(this.id,path,4*1024**2);
     return b && b.size <= 4 * 1024 * 1024 ? await b.arrayBuffer() : null;
   }
   async plugins() {
@@ -114,34 +115,36 @@ export class Package {
     const assets = await this.json("normalized/assets.json");
     const a = assets.find((x) => x.logical_path === logical);
     if (!a) return null;
-    return (
-      (await get("files", this.id + "/resource/" + logical)) ||
+    const blob = (
+      (await get("files", this.id + "/resource/" + logical)) || await lazyResource(this.id,logical) ||
       (a.output_path
-        ? await get("files", this.id + "/" + a.output_path)
+        ? (await get("files", this.id + "/" + a.output_path)) || await lazyFile(this.id,a.output_path,128*1024**2)
         : null) ||
       null
     );
+    return blob ? (await inspectImage(blob)).blob : null;
   }
 }
 export async function importZip(file, progress, existing) {
   // Read sequentially with native Streams, without worker lifecycle dependencies.
   // CRC checks and per-entry/total size limits remain enabled.
   const zip = new ZipReader(new BlobReader(file), { useWebWorkers: false });
+  let retained=false;
   try {
     const entries = await zip.getEntries();
-    if (entries.length > 30000) throw Error("파일 개수 한도");
+    if (entries.length > 30000) throw Error(`ZIP 파일 개수 ${entries.length}개: 한도 30000개 초과`);
     let total = 0;
     const paths = new Set();
     for (const e of entries) {
       if (e.directory) continue;
       const entryPath = existing ? normalizePath(e.filename) : e.filename;
       if (!safe(entryPath) || paths.has(entryPath.toLowerCase()))
-        throw Error("중복/안전하지 않은 ZIP 경로");
+        throw Error("중복/안전하지 않은 ZIP 경로: "+e.filename);
       paths.add(entryPath.toLowerCase());
       total += e.uncompressedSize;
-      if (e.uncompressedSize > 128 * 1024 * 1024 || total > 2 * 1024 ** 3)
-        throw Error("ZIP 처리 한도 초과");
+      if(!Number.isSafeInteger(e.uncompressedSize)||!Number.isSafeInteger(total))throw Error(`ZIP 크기 메타데이터 오류: ${e.filename}`);
     }
+    const lazy=total>256*1024**2 || file.size>256*1024**2;
     const manifests = entries.filter(
       (e) =>
         e.filename === "manifest.json" || e.filename.endsWith("/manifest.json"),
@@ -178,8 +181,9 @@ export async function importZip(file, progress, existing) {
           report.files.push({ path: e.filename, status: "duplicate_target" });
         } else {
           try {
+            if(lazy){mountResource(existing.id,match.asset.logical_path,e);retained=true;report.matched++;report.files.push({path:e.filename,status:'linked_unverified',logical:match.asset.logical_path});progress(report.scanned,entries.length);continue;}
             const info = await inspectImage(
-              await e.getData(new BlobWriter(), { checkSignature: true }),
+              await readEntry(e,128*1024**2),
             );
             await put(
               "files",
@@ -228,7 +232,8 @@ export async function importZip(file, progress, existing) {
     )
       throw Error("지원하지 않는 패키지");
     const prefix = m.filename.slice(0, -13),
-      id = crypto.randomUUID();
+      id = lazy ? ((await library()).find(x=>x.lazyArchive&&x.manifest.package_id===manifest.package_id)?.id || crypto.randomUUID()) : crypto.randomUUID();
+    if(lazy){mountZip(id,zip,entries,prefix);retained=true;}
     let i = 0;
     for (const e of entries) {
       if (!e.directory && e.filename.startsWith(prefix)) {
@@ -238,15 +243,15 @@ export async function importZip(file, progress, existing) {
             path,
           )
         )
-          await put(
+          if(!lazy)await put(
             "files",
             id + "/" + path,
-            await e.getData(new BlobWriter(), { checkSignature: true }),
+            await readEntry(e,128*1024**2),
           );
       }
       progress(++i, entries.length);
     }
-    const meta = { id, manifest, created: new Date().toISOString() },
+    const meta = { id, manifest, lazyArchive:lazy, archiveName:file.name||null, archiveBytes:file.size, expandedBytes:total, created: new Date().toISOString() },
       p = new Package(meta);
     const [game, maps, events] = await Promise.all([
       p.json("normalized/game.json"),
@@ -255,6 +260,7 @@ export async function importZip(file, progress, existing) {
     ]);
     if (!Array.isArray(maps) || !Array.isArray(events))
       throw Error("잘못된 인덱스");
+    if(!maps.length || !events.length)throw Error(`감상 데이터 부족: 맵 ${maps.length}개 / 이벤트 ${events.length}개. 추출 보고서의 누락·파싱 오류를 확인하세요.`);
     for (const x of [...maps, ...events])
       if (!safe(x.file)) throw Error("잘못된 이벤트 파일 참조");
     Object.assign(meta, {
@@ -262,9 +268,10 @@ export async function importZip(file, progress, existing) {
       maps: maps.length,
       events: events.length,
     });
+    await put("meta", "places-v1:"+id, null);
     await put("meta", id, meta);
     return new Package(meta);
   } finally {
-    await zip.close();
+    if(!retained)await zip.close();
   }
 }

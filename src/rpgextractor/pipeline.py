@@ -265,9 +265,10 @@ class Extractor:
             self.write("reports/warnings.json","issues",self.issues)
             self.write("manifest.json","manifest",self.manifest())
             self.write("report.json","report",self.report(False))
-        except (OSError,ValueError,MemoryError,RecursionError):
+        except (OSError,ValueError,MemoryError,RecursionError) as error:
             self.state="partial" if self.counts else "failed"
-            self.issue("extraction_interrupted","output","저장 공간, 접근 권한 또는 데이터 처리 한도를 확인하세요.","error")
+            code = {28:"disk_full",13:"permission_denied",2:"file_missing"}.get(getattr(error,"errno",None),"extraction_interrupted")
+            self.issue(code,str(getattr(error,"filename",None) or "output"),"남은 추출 결과를 보존했습니다. 저장 공간/접근 권한 또는 손상 파일을 확인하고 새 결과 폴더로 재시도하세요.","error")
             try:
                 self.write("reports/warnings.json","issues",self.issues)
                 self.write("manifest.json","manifest",self.manifest())
@@ -651,6 +652,8 @@ class Extractor:
                 "unknown_commands":len(self.unknown),"opaque_operations":len(self.opaque),"output_folder":str(self.output)}
 
     def finish(self):
+        if not self.maps or not self.events:
+            self.issue("no_story_content","normalized","맵 또는 이벤트가 0개입니다. 원본 데이터 폴더와 파싱 오류를 확인하세요. 남은 데이터는 보존합니다.","error")
         self.cancel()
         if any(not x["raw_equal"] for x in self.integrity): self.issue("raw_mismatch","integrity","원본 이벤트 재구성 비교에 실패했습니다.","error")
         if any(self.counts[k]!=self.original_counts[k] for k in COUNT_KEYS): self.issue("count_mismatch","integrity","원본/출력 개수 불일치. 무손실 검증 보고서를 확인하세요.","error")

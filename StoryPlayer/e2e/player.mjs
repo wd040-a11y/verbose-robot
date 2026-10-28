@@ -18,7 +18,7 @@ async function advanceToGreeting(){
 }
 
 try{
- await page.locator('input[type=file]').first().setInputFiles(path.resolve('fixtures/sample.zip'));
+ await page.locator('input[type=file]').first().setInputFiles(path.resolve(process.env.PLAYER_LARGE?' .large-test/large.zip'.trim():'fixtures/sample.zip'));
  await expect(page.getByRole('button',{name:/빈 장소/})).toHaveCount(0);
  await page.getByRole('button',{name:/시작 마을/}).click();
  const npc=page.locator('article').filter({hasText:'안내 NPC'});
@@ -82,6 +82,7 @@ try{
   await advanceToGreeting();
  }
  await fs.mkdir('reports' ,{recursive:true});
+ if(process.env.PLAYER_LARGE)await fs.writeFile('reports/large-zip-gui.json',JSON.stringify({passed:true,mode,archiveBytes:(await fs.stat('.large-test/large.zip')).size,checks:['real ZIP64 file input','map and event JSON after 2GiB offset','dialogue and choices','separate media connection'],realGame:false},null,2));
  await page.screenshot({path:`reports/integrated-${mode}.png`,fullPage:true});
  if(errors.length)throw Error(errors.join('\n'));
  await fs.writeFile(`reports/gui-${mode}.json`,JSON.stringify({passed:true,mode,checks:['package import','static dialogue','separate branch boundaries','choices','existing interpreter dialogue','resource ZIP counts','static CG decoded and visible','package access audit'],realGame:false},null,2));
