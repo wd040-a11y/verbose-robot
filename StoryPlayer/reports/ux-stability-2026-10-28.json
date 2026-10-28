@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-28",
+  "tested_commit": "54b12f29f8b1b89cc5a069d48b2666b606b048fa",
+  "source_sha256": "13ea682d6322f254bd7ddfcde89911cee1d9c046b33a6afdba926f346e8f7692",
+  "implemented": [
+    "대사 중심 CG 통합과 순간 CG 기록",
+    "CG 전용 감상과 이전 상태 복원",
+    "단일 CG 맞춤/원본 좌표 표시",
+    "빈 장소 제외, 미확정 장소 구분, 검색 색인",
+    "모바일 재생 화면 및 고정 조작 영역",
+    "ZIP64 지연 파일 읽기, CRC/경로/파일별 크기 보호",
+    "경량 Story.zip 생성 및 0개 콘텐츠/추출 오류 보고"
+  ],
+  "verification": {
+    "player_unit_tests": 64,
+    "extractor_unit_tests": 52,
+    "browser_gui": [
+      "Chromium",
+      "WebKit"
+    ],
+    "windows_packaged_gui": true,
+    "portable_console_free": true,
+    "large_zip": {
+      "archive_bytes": 2147822189,
+      "real_file_input": true,
+      "read_story_beyond_2GiB": true,
+      "dialogue_choices_media_connection": true,
+      "synthetic": true
+    },
+    "cg_rewind_pixel_mean_difference": {
+      "chromium": 0,
+      "webkit": 0,
+      "electron": 0.0627177700348432
+    },
+    "required_dialogue_CG_sequence_gui": true,
+    "windows_web_source_hash_equal": true,
+    "player_run": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40634703397",
+    "extractor_run": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40634703430"
+  },
+  "unverified": [
+    "실제 사용자 게임",
+    "iOS 실기기",
+    "모든 ZIP64 생성기/코덱",
+    "대용량 단일 영상 연속 재생"
+  ],
+  "limitations": [
+    "대용량 ZIP은 앱 재실행 시 재선택해야 함; 저장 상태는 유지",
+    "파일 수 30000개, JSON 32MiB, 개별 미디어 128MiB, 플러그인 원문 4MiB",
+    "장소 목록은 처음 100개 표시 후 검색으로 좁힘",
+    "플러그인 실행 효과와 동적 콘텐츠는 미확정",
+    "첫 검색 색인은 모든 맵을 순차 확인하므로 큰 게임에서는 시간이 필요",
+    "경량 Story.zip은 플러그인 원본·미디어·원본 보관 파일을 제외하므로 고급 분석에는 전체 패키지가 필요",
+    "과거 actual-package.json 보고서는 이번 실게임 검증 결과가 아님"
+  ],
+  "user_steps": [
+    "게임 ZIP 선택",
+    "필요시 리소스 ZIP 연결",
+    "장소와 장면 선택 후 감상",
+    "콘텐츠 접근성 검사 후 JSON 저장"
+  ],
+  "external_ai_calls": false
+}
