@@ -1,0 +1,125 @@
+{
+  "tested_commit": "9991f809f81e5811a6b085fba38edf1898ff2ed1",
+  "extractor_ci": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40683904123",
+  "windows_artifact": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40683904123/artifacts/12813908047",
+  "artifact_sha256": "cecbe544ed17d9af60f57a9923a3be4234107a49fc99036fa10cdc534bd74b64",
+  "tests": {
+    "linux": {
+      "passed": 65,
+      "skipped": 1,
+      "reason": "PySide6 unavailable; GUI tested on Windows"
+    },
+    "windows": {
+      "passed": 67,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "packaged_gui": {
+    "passed": true,
+    "console_attached": false,
+    "launches": 2,
+    "cases_per_launch": [
+      "MV",
+      "MZ",
+      "VXACE loose",
+      "VXACE RGSS3 archive"
+    ],
+    "checks": [
+      "auto discovery",
+      "default story mode",
+      "Story.zip",
+      "schema",
+      "extract button",
+      "folder open",
+      "close/reopen"
+    ]
+  },
+  "player_regression": {
+    "run": "https://github.com/wd040-a11y/verbose-robot/actions/runs/40683537225",
+    "commit": "d233d552527ee2016c9bdda76bc1f49d42912e99",
+    "note": "final commit changes only regression fixture UTF-8 handling; runtime identical",
+    "chromium": true,
+    "webkit": true,
+    "electron": true
+  },
+  "story_compatibility": [
+    {
+      "passed": true,
+      "synthetic": true,
+      "zipBytes": 24073,
+      "maps": 2,
+      "rawCommands": 26,
+      "firstDialogue": true
+    },
+    {
+      "passed": true,
+      "synthetic": true,
+      "zipBytes": 24024,
+      "maps": 2,
+      "rawCommands": 26,
+      "firstDialogue": true
+    }
+  ],
+  "large_synthetic": {
+    "synthetic": true,
+    "report": {
+      "state": "complete_with_issues",
+      "schema_valid": true,
+      "source_counts": {
+        "maps": 2,
+        "events": 2501,
+        "pages": 5004,
+        "commands": 72510,
+        "common_events": 2,
+        "troops": 1,
+        "dialogue_commands": 12501,
+        "choice_commands": 2500
+      },
+      "output_counts": {
+        "maps": 2,
+        "events": 2501,
+        "pages": 5004,
+        "commands": 72510,
+        "common_events": 2,
+        "troops": 1,
+        "dialogue_commands": 12501,
+        "choice_commands": 2500
+      },
+      "switches": 3,
+      "variables": 3,
+      "images": 3,
+      "assets": 4,
+      "decrypted": 1,
+      "asset_failures": 0,
+      "plugins": 1,
+      "errors": 0,
+      "warnings": 0,
+      "unknown_commands": 2500,
+      "opaque_operations": 2500,
+      "output_folder": "/workspace/scratch/4377af4c0742/extractor-large-check/out/RPGMakerExtractor_game"
+    },
+    "seconds": 20.310207658999957,
+    "integrity": {
+      "events_compared": 2504,
+      "all_raw_equal": true,
+      "counts_equal": true,
+      "mismatches": []
+    },
+    "story_zip_bytes": 6413370
+  },
+  "validation_cancel": {
+    "cancelled": true,
+    "events_preserved": true,
+    "manifest_report_validation_consistent": true
+  },
+  "real_user_game_verified": false,
+  "ios_device_verified": false,
+  "limitations": [
+    "single-run Linux performance comparison, not a Windows performance benchmark",
+    "no complete re-extraction cache reuse",
+    "resource-only retry requires a single loose-file game root; archives require fresh extraction",
+    "wrong encryption key versus corruption cannot always be distinguished; no guessed key",
+    "disk full may prevent writing final report"
+  ]
+}
