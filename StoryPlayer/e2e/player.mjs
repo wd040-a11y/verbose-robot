@@ -1,6 +1,7 @@
 import {chromium,webkit,_electron,expect} from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {execFileSync} from 'node:child_process';
 const mode=process.env.PLAYER_EXE?'electron':process.env.PLAYER_BROWSER||'chromium';
 let app,browser,page;
 if(mode==='electron'){app=await _electron.launch({executablePath:path.resolve(process.env.PLAYER_EXE)});page=await app.firstWindow();}
@@ -60,7 +61,9 @@ try{
  await expect(page.getByText(/장면 감상 완료/)).toBeVisible();
  await page.getByRole('button',{name:'이전',exact:true}).click();
  await expect(page.locator('.picture-layer img')).toHaveCount(1);
- if(!cgPixels.equals(await page.locator('.scene').screenshot()))throw Error('CG rewind pixel regression');
+ await fs.writeFile(`reports/cg-before-${mode}.png`,cgPixels);
+ await page.locator('.scene').screenshot({path:`reports/cg-after-${mode}.png`});
+ execFileSync('python',['scripts/compare-scenes.py',`reports/cg-before-${mode}.png`,`reports/cg-after-${mode}.png`],{stdio:'inherit'});
  const integratedScene=page.locator('article').filter({hasText:'대사 CG 통합 검증'});
  await integratedScene.getByRole('button',{name:'감상하기',exact:true}).click();
  await expect(page.getByText('대사 A',{exact:true})).toBeVisible();
