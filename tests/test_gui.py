@@ -28,7 +28,7 @@ def test_gui_scan_extract_and_repeat_scan(tmp_path):
         assert w.open.isEnabled() and w.last_output.parent==out
         assert load_json(w.last_output/"report.json")["data"]["schema_valid"]
         assert "맵 2" in w.status.text()
-        assert (w.last_output/"Story.zip").is_file()
+        assert (w.last_output/"Game.zip").is_file()
         assert "출력 검증" in w.log.toPlainText()
         w.start_scan(); wait_idle(w)
         assert w.start.isEnabled()

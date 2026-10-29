@@ -61,7 +61,8 @@ class MainWindow(QMainWindow):
         group=QGroupBox("고급 설정"); group.setVisible(False);
         advanced=QCheckBox("고급 설정 표시"); layout.addWidget(advanced); advanced.toggled.connect(group.setVisible)
         grid=QGridLayout(group); self.checks={}
-        labels=[("raw_json","원본 JSON 보존",True,"System.json의 암호화 키는 기본적으로 제외합니다."),
+        labels=[("legacy_story_zip","미디어 없는 Story.zip도 추가 생성",False,"기본 Game.zip 외에 텍스트 전용 패키지가 필요한 경우만 선택합니다."),
+                ("raw_json","원본 JSON 보존",True,"System.json의 암호화 키는 기본적으로 제외합니다."),
                 ("plugin_sources","JavaScript·플러그인 원본 보존",True,"파일을 자료로 복사하며 실행하지 않습니다."),
                 ("images","이미지·효과 추출",True,"이미지 참조는 이 옵션을 꺼도 색인화합니다."),
                 ("decrypt","표준 암호화 파일 복원",True,"System.json에 있는 표준 키와 검증된 헤더만 사용합니다."),
@@ -161,7 +162,7 @@ class MainWindow(QMainWindow):
                     status='일부 실패' if counts.get('failed',0)+counts.get('unsupported_encryption',0) else '옵션 제외 포함' if counts.get('copy_disabled',0)+counts.get('decryption_disabled',0) else '처리 완료' if counts else '발견 없음'
                     labels.append(label+': '+status)
                 story='확인 필요' if any(x['severity']=='error' and x['code'] not in ('key_missing','header_mismatch','truncated_file','restored_format_invalid','corrupt_media','io_failed','access_denied','source_missing') for x in load_json(self.last_output/'reports/warnings.json')['data']) else '데이터·무결성 확인'
-                self.status.setText(self.status.text()+'\n스토리: '+story+' / '+' / '.join(labels)+'\nGame.zip 하나를 재생기에 등록하세요 (CG·영상 포함) · Story.zip: 미디어 없는 호환용 · reports/: 진단')
+                self.status.setText(self.status.text()+'\n스토리: '+story+' / '+' / '.join(labels)+'\nGame.zip 하나를 재생기에 등록하세요 (CG·영상 포함) · Story.zip은 고급 설정에서 선택한 경우만 생성 · reports/: 진단')
             except (OSError,ValueError,KeyError):pass
             self.log.appendPlainText(self.status.text())
             try:

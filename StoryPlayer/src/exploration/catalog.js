@@ -1,3 +1,4 @@
+import {previewText} from "../presentation/text.js";
 export async function classify(
   page,
   common = async () => null,
@@ -108,7 +109,7 @@ export function friendlyName(event, info, label) {
   if (name && !/^EV\d+$/i.test(name)) return name;
   const first = info.texts.find((t) => t.text)?.text;
   return first
-    ? `${info.category} · ${first.replace(/\\[A-Za-z]+\[[^\]]*\]/g, "").slice(0, 28)}`
+    ? `${info.category} · ${previewText(first).slice(0, 60)}`
     : `${info.category} 장면`;
 }
 export function staticText(page) {
@@ -123,4 +124,14 @@ export function staticText(page) {
           ? c.raw.parameters[0].join(" / ")
           : c.raw.parameters[0],
     }));
+}
+
+export function groupScenes(events){
+ const groups=new Map();
+ for(const event of events){
+  const key=JSON.stringify(event.pages.map(p=>({metadata:p.raw_metadata,commands:p.commands.map(c=>c.raw)})));
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push(event);
+ }
+ return [...groups.values()];
 }

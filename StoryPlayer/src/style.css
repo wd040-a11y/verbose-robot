@@ -573,3 +573,5 @@ button { touch-action: manipulation; }
   .explorer[data-mobile="재생"] .viewer {height:calc(100dvh - 80px - env(safe-area-inset-bottom));min-height:0;max-height:none;padding:12px;}
   .scene {height:auto;max-height:40dvh;min-height:70px;}
 }
+
+.dialogue-speaker {display:block;font-weight:700;margin-bottom:.4em;}

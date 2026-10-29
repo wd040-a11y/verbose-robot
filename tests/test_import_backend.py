@@ -23,3 +23,16 @@ def test_missing_bundled_schema_is_not_reported_as_game_json_failure(tmp_path,mo
  errors=validation.validate_package(tmp_path)
  assert len(errors)==1 and errors[0]['path']=='schemas/package.schema.json'
  assert '프로그램의 검증 스키마' in errors[0]['message']
+
+def test_attach_portable_settings_preserves_game(tmp_path,monkeypatch):
+ import zipfile,json,sys
+ import launch_import
+ archive=tmp_path/'Game.zip';settings=tmp_path/'settings.json'
+ with zipfile.ZipFile(archive,'w') as z:
+  z.writestr('manifest.json',json.dumps({'package_id':'test'}));z.writestr('assets/cg.png',b'original-media')
+ settings.write_text(json.dumps({'package_id':'test','title':'새 이름','format':'rpg-player-settings','version':1}),encoding='utf-8')
+ monkeypatch.setattr(sys,'argv',['launch_import','--attach-settings',str(archive),str(settings)])
+ assert launch_import.main()==0
+ with zipfile.ZipFile(archive) as z:
+  assert z.read('assets/cg.png')==b'original-media'
+  assert json.loads(z.read('player/settings.json'))['title']=='새 이름'

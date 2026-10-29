@@ -1,3 +1,7 @@
+import {portableSettings,checkSettings,checkedAnalysis} from "./enrichment/portable.js";
+import {mergeResults} from "./enrichment/manager.js";
+import {groupScenes} from "./exploration/catalog.js";
+import { previewText } from "./presentation/text.js";
 import {nativePackage} from './native-package.js';
 import {placeName} from './localization/places.js';
 import "./style.css";
@@ -82,6 +86,12 @@ if(window.localGames){
  }),top);
 }
 button("게임 관리", manageGames, top);
+if(window.localGames) button("웹·모바일용 Game.zip 내보내기",async()=>{
+ if(!c.pkg?.nativeToken) { c.status('게임 폴더 열기로 등록한 게임을 선택하세요. ZIP으로 등록한 게임은 기존 ZIP을 그대로 옮기면 됩니다.'); return; }
+ c.status('내보낼 위치를 선택하세요.');
+ const result=await window.localGames.exportPackage(c.pkg.nativeToken,portableSettings(c.pkg.manifest.package_id,(await get('meta',c.pkg.id)).title,c.placeNames,c.hidden,c.enrichment));
+ c.status(result?.saved?'Game.zip 저장 완료 · 웹이나 모바일의 파일 선택으로 불러오세요. 번역·이름·숨김 설정 포함. 진행 저장은 별도입니다.':'내보내기 취소');
+},top);
 button("콘텐츠 접근성 검사",()=>c.pkg && inspectPackage(c.pkg),top);
 const modeSelect = select(top, "감상 모드", [
     ["story", "스토리 감상 (기본)"],
@@ -346,7 +356,10 @@ async function manageGames(){
  for(const row of rows){const box=el('article',null,d);el('h3',row.title,box);
  const duplicates=rows.filter(x=>x.manifest.package_id===row.manifest.package_id).length;
  el('p',`${row.manifest.engine} · ${row.created?.slice(0,10)||''} · ${row.maps}개 장소${duplicates>1?' · 같은 패키지 '+duplicates+'개':''}`,box);
- const keep=el('label',null,box),check=input(keep,'감상 상태 보관','checkbox');check.checked=true;el('span','삭제 후에도 저장·번역·기록 보관 (동일 패키지 재등록 시 복원)',keep);
+ const rename=input(box,'게임 이름');rename.value=row.title;
+ button('게임 이름 저장',async()=>{const value=rename.value.trim();if(!value)return;const m=await get('meta',row.id);m.title=value;await put('meta',row.id,m);await refreshGames();if(c.pkg)games.value=c.pkg.id;d.close();},box);
+ button('숨긴 장소·장면 다시 표시',async()=>{await put('meta','hidden:'+row.id,{maps:[],events:[]});if(c.pkg?.id===row.id){c.hidden={maps:[],events:[]};renderMaps();renderEvents();}d.close();},box);
+ const keep=el('label' ,null,box),check=input(keep,'감상 상태 보관','checkbox');check.checked=true;el('span','삭제 후에도 저장·번역·기록 보관 (동일 패키지 재등록 시 복원)',keep);
  button('이 게임 삭제',async()=>{
  const confirm=modal('게임을 삭제할까요?');el('p',`${row.title}의 등록 데이터와 연결 미디어를 삭제합니다. 원본 게임 폴더와 가져온 ZIP 파일은 삭제하지 않습니다.`,confirm);
  button('삭제 확인',async()=>{
@@ -376,6 +389,7 @@ async function load(id) {
   c.events = [];
   c.currentMap = null;
   c.referenceIndex = [];
+  c.hidden = (await get('meta','hidden:'+id)) || {maps:[],events:[]};
   c.placeNames = (await get("meta", "place-names:"+id)) || {};
   c.maps = await c.pkg.json("normalized/maps.json");
   c.game = await c.pkg.json("normalized/game.json");
@@ -396,6 +410,18 @@ async function load(id) {
   await put("meta","places-v2:"+id,c.placeIndex);
   c.db = await actorDatabase(c.pkg);
   c.db.Items = await database(c.pkg, "Items");
+  const portable=await get('meta','portable-settings:'+id);
+  if(portable){
+   try{
+    const settings=checkSettings(portable,c.pkg.manifest.package_id);
+    const checked=await checkedAnalysis(settings.analysis,c);
+    c.enrichment=mergeResults(c.enrichment,checked);c.placeNames=settings.placeNames;c.hidden=settings.hidden;
+    m.title=settings.title;c.pkg.title=m.title;
+    await put('meta',id,m);await put('meta','place-names:'+id,c.placeNames);await put('meta','hidden:'+id,c.hidden);await c.saveEnrichment();await refreshGames();games.value=id;
+   }catch(error){c.status('게임은 등록됐지만 포함된 개인 설정은 적용하지 못했습니다: '+error.message);}
+   await put('meta','portable-settings:'+id,null);
+  }
+
   const s = c.game.system.advanced || {};
   renderer.setSize(
     s.screenWidth || (m.manifest.engine === "VXACE" ? 544 : 816),
@@ -424,8 +450,9 @@ async function clearPlayer() {
 function renderMaps() {
   mapList.replaceChildren();
   const query=globalSearch.value.toLowerCase();
-  const rows=c.maps.filter(m=>{const info=c.placeIndex?.[m.map_id];return (placeFilter.value==='all'||!info||info.uncertain||info.count>0)&&(!query||((info?.text||m.name||'')+' '+placeName(m,c.placeNames,c.text('map:'+m.map_id,m.name)).text).toLowerCase().includes(query));});
+  const rows=c.maps.filter(m=>{const info=c.placeIndex?.[m.map_id];return (placeFilter.value==='all'||(!(c.hidden?.maps||[]).includes(m.map_id)&&info?.count>0))&&(!query||((info?.text||m.name||'')+' '+placeName(m,c.placeNames,c.text('map:'+m.map_id,m.name)).text).toLowerCase().includes(query));});
   if(!rows.length&&c.maps.length)el('p','감상 콘텐츠가 확인된 장소가 없습니다. 전체 장소 또는 다른 검색어를 확인하세요.',mapList);
+  if(c.currentMap)button('현재 장소 숨기기',async()=>{c.hidden.maps.push(c.currentMap.map_id);await put('meta','hidden:'+c.pkg.id,c.hidden);renderMaps();},mapList,'subtle');
   let shown = 0;
   const more = button("장소 더 보기", appendMaps, mapList);
   function appendMaps() {
@@ -480,7 +507,7 @@ async function renderEvents() {
   eventList.replaceChildren();
   if (!c.currentMap) return;
   const search = globalSearch.value.toLowerCase();
-  let rows = c.events.filter(
+  let rows = c.events.filter(e => !(c.hidden?.events||[]).includes(e.id)).filter(
     (e) =>
       !search ||
       JSON.stringify([e.raw_metadata.name, c.infos.get(e.id)?.texts])
@@ -493,6 +520,9 @@ async function renderEvents() {
   if(!rows.length)el("p","이 장소에 검색 조건과 맞는 장면이 없습니다. 검색어를 지우거나 전체 이벤트를 확인하세요.",eventList);
   if (eventFilter.value === "system")
     rows = rows.filter((e) => !c.infos.get(e.id)?.content);
+  const grouped=mode==='story'?groupScenes(rows):rows.map(e=>[e]);
+  const duplicates=new Map(grouped.map(g=>[g[0].id,g]));
+  rows=grouped.map(g=>g[0]);
   paginate(
     eventList,
     rows,
@@ -508,9 +538,12 @@ async function renderEvents() {
             ? c.enrichment.items?.["translation:" + e.id]?.value.text
             : null),
       );
-      el("strong", name, row);
+      el("strong", previewText(name), row);
+      const same=duplicates.get(e.id)||[e];
+      if(same.length>1){const d=el('details',null,row);el('summary',`동일 원문 ${same.length}개 · 원본별 선택`,d);el('p','명령·페이지 조건이 같습니다. 원본 이벤트는 별도로 보존합니다.',d);for(const source of same)button(source.id,()=>watch(source),d);}
+
       const first=info.texts.find(t=>typeof t.text==='string'&&t.text.trim());
-      if(first)el('p','미리보기: '+first.text.slice(0,160),row,'scene-preview');
+      if(first && !previewText(name).includes(previewText(first.text).slice(0,60)))el('p','미리보기: '+previewText(first.text).slice(0,160),row,'scene-preview');
       el('small',`${info.dialogue?'대화 · ':''}${info.choices?'선택지 · ':''}${info.pictures?'CG/영상 · ':''}감상 가능한 상황 ${info.entries.filter(x=>x.content).length}개`,row);
       const ctx = { map: c.currentMap.map_id, event: e.source.event_id },
         active = selectPage(e, c.world, ctx);
@@ -520,7 +553,8 @@ async function renderEvents() {
         row,
       );
       button("감상하기", () => watch(e), row, "primary");
-      button("상황 선택", () => { if(mode!=="story") return conditionDialog(e); const d=modal("감상할 상황 선택");e.pages.forEach((p,i)=>button(`상황 ${i+1} · ${c.infos.get(e.id)?.entries[i]?.category||"미분류"}${c.infos.get(e.id)?.entries[i]?.content?"":" · 감상 콘텐츠 없음"}`,async()=>{d.close();await start(e,i,clone(c.world),true,["페이지 직접 감상 · 도달 가능성 미확정"]);},d)); }, row, "subtle");
+      button("이 장면 숨기기",async()=>{c.hidden.events.push(e.id);await put('meta','hidden:'+c.pkg.id,c.hidden);renderEvents();},row,'subtle');
+      button("상황 선택", () => { if(mode!=="story") return conditionDialog(e); const d=modal("감상할 상황 선택");e.pages.forEach((p,i)=>c.infos.get(e.id)?.entries[i]?.content&&button(`상황 ${i+1} · ${c.infos.get(e.id)?.entries[i]?.category||"미분류"}${c.infos.get(e.id)?.entries[i]?.content?"":" · 감상 콘텐츠 없음"}`,async()=>{d.close();await start(e,i,clone(c.world),true,["페이지 직접 감상 · 도달 가능성 미확정"]);},d)); }, row, "subtle");
       details(row, "고급 · 원본 식별 정보", {
         map: c.currentMap.map_id,
         event: e.id,
@@ -712,7 +746,8 @@ async function renderSession(instant = false) {
       .catch((e) => c.error(e.message));
   } else if (w.type === "choice") {
     stopAuto();
-    dialogue.textContent = "어떻게 답할까요?";
+    dialogue.textContent = w.condition ? "어느 상황의 내용을 볼까요?" : "어떻게 답할까요?";
+    if(w.condition)el('p','원작이 상태에 따라 나누는 분기입니다. 현재 감상에서는 조건을 실행하지 않습니다. 원하는 쪽을 열람하며, 대사가 없는 경로일 수도 있습니다.',choices);
     w.choices.forEach((text, i) =>
       button(
         c.text(`${w.command}:choice:${i}`, text),

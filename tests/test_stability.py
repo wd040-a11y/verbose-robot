@@ -19,10 +19,11 @@ def test_story_profile_and_roots(tmp_path,engine,nested):
  r=Extractor(Options.story()).run(tmp_path/'game',tmp_path/'out');out=Path(r['output_folder'])
  assert r['schema_valid'] and r['output_counts']['events']>0
  assert not (out/'source_archive').exists() and not (out/'llm_input').exists()
+ assert not (out/'Story.zip').exists()
  assert not validate_package(out)
- with zipfile.ZipFile(out/'Story.zip') as z:
+ with zipfile.ZipFile(out/'Game.zip') as z:
   assert 'normalized/assets.json' in z.namelist() and 'events/map_001.json' in z.namelist()
-  assert not any(n.startswith(('assets/','raw/','llm_input/')) for n in z.namelist())
+  assert not any(n.startswith(('raw/','llm_input/')) for n in z.namelist())
   shard=json.loads(z.read('events/map_001.json'))['data'];assert shard['events'][0]['pages'][0]['commands'][0]['raw']['code']==101
  perf=payload(out/'reports/performance.json')
  assert perf['validation']['full']['scope']=='full' and perf['validation']['final_reports']['files']==4

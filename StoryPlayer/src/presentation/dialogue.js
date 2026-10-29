@@ -70,6 +70,11 @@ export class Dialogue {
     for (const t of tokens) {
       if (gen !== this.generation) return;
       if (t.warning) warnings.add(t.warning);
+      if(t.type==='speaker'){
+        const speaker=append(t.text,'dialogue-speaker');
+        speaker.title='원문 이름 표기를 읽기 쉽게 표시합니다. 플러그인의 창 연출은 재현하지 않습니다.';
+        continue;
+      }
       if (t.type === "text" || t.type === "unsupported") {
         if (t.type === "unsupported")
           warnings.add(`미지원 효과 ${t.raw} (원문 보존)`);

@@ -1,3 +1,4 @@
+import { sourceRows, buildSources } from "../enrichment/sources.js";
 import {
   el,
   button,
@@ -533,10 +534,14 @@ export async function analysisPanel(parent, c) {
   button(
     "AI 분석 준비",
     async () => {
-      await c.ensureIndex();
+      c.cancelIndex = false;
+      const sources = sourceRows(c.pkg, c.game, c.maps, c.pkg.commons, c.db, {
+        progress: (n,t) => c.status(`분석 작업 분할 ${n}/${t} 맵`),
+        cancelled: () => c.cancelIndex,
+      });
       download(
         "story-analysis-jobs.zip",
-        await analysisZip(c.pkg.manifest.package_id, c.index),
+        await analysisZip(c.pkg.manifest.package_id, sources),
       );
       analysisPanel(parent, c);
     },
@@ -554,9 +559,22 @@ export async function analysisPanel(parent, c) {
   f.onchange = async () => {
     try {
       if (f.files[0].size > 24e6) throw Error("분석 파일 크기 제한");
-      await c.ensureIndex();
-      const data = JSON.parse(await f.files[0].text()),
-        items = checkResult(data, c.pkg.manifest.package_id, c.index);
+      const data = JSON.parse(await f.files[0].text());
+      const wanted = new Set();
+      const collect = value => {
+        if (typeof value === 'string') wanted.add(value);
+        else if (Array.isArray(value)) value.forEach(collect);
+        else if (value && typeof value === 'object') Object.values(value).forEach(collect);
+      };
+      collect(data);
+      for (const item of data.items || []) {
+        const v=item.value || {};
+        if(v.actor_id)wanted.add(`actor:${v.actor_id}`);
+        for(const ref of [...(v.sources||[]),...(v.changes||[])]) wanted.add(`${ref.kind}:${ref.id}`);
+      }
+      for(const asset of c.pkg.assets || []) if(wanted.has(asset.logical_path)) wanted.add(asset.id);
+      const index = await buildSources(c.pkg,c.game,c.maps,c.pkg.commons,c.db,{wanted});
+      const items = checkResult(data, c.pkg.manifest.package_id, index);
       c.enrichment = mergeResults(c.enrichment, items);
       await c.saveEnrichment();
       analysisPanel(parent, c);

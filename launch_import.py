@@ -6,6 +6,17 @@ from rpgextractor.discovery import discover
 from rpgextractor.io import write_json,load_json
 
 def main():
+ if len(sys.argv)==4 and sys.argv[1]=='--attach-settings':
+  import zipfile
+  archive,settings=Path(sys.argv[2]),Path(sys.argv[3])
+  if settings.stat().st_size>24_000_000:raise ValueError('개인 설정 크기 제한')
+  data=json.loads(settings.read_text(encoding='utf-8'))
+  with zipfile.ZipFile(archive,'a',compression=zipfile.ZIP_DEFLATED,allowZip64=True) as z:
+   manifest=json.loads(z.read('manifest.json'))
+   if data.get('package_id')!=manifest['package_id']:raise ValueError('패키지 식별 정보 불일치')
+   if 'player/settings.json' in z.namelist():raise ValueError('개인 설정 중복')
+   z.writestr('player/settings.json',json.dumps(data,ensure_ascii=False))
+  return 0
  p=argparse.ArgumentParser();p.add_argument('--input',required=True);p.add_argument('--output',required=True);p.add_argument('--result',required=True);p.add_argument('--progress',required=True);p.add_argument('--candidate',type=int);a=p.parse_args()
  def progress(stage,current,total,errors):
   # Progress polling must never turn a transient Windows file lock into data loss.

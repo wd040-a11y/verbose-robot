@@ -1,4 +1,4 @@
-export async function buildSources(
+export async function* sourceRows(
   pkg,
   game,
   maps,
@@ -6,16 +6,8 @@ export async function buildSources(
   db,
   { progress = () => {}, cancelled = () => false } = {},
 ) {
-  const index = {};
-  let bytes = 0,
-    count = 0;
-  const add = (id, value) => {
-    if (!id) return;
-    const row = { id, ...value };
-    bytes += JSON.stringify(row).length;
-    if (bytes > 30e6 || ++count > 100000) throw Error("분석 자료 크기 제한");
-    index[id] = row;
-  };
+  let rows = [];
+  const add = (id, value) => { if (id) rows.push({ id, ...value }); };
   (game.system.switches || []).forEach((text, id) => {
     if (id) add(`switch:${id}`, { kind: "switch", text });
   });
@@ -72,6 +64,7 @@ export async function buildSources(
         );
     }
   };
+  yield* rows; rows = [];
   for (let i = 0; i < maps.length; i++) {
     if (cancelled()) throw Error("분석 준비 취소");
     const m = maps[i];
@@ -87,6 +80,7 @@ export async function buildSources(
       });
       for (const p of e.pages) page(p, e.id, m.map_id);
     }
+    yield* rows; rows = [];
     progress(i + 1, maps.length);
     await new Promise((r) => setTimeout(r, 0));
   }
@@ -95,6 +89,7 @@ export async function buildSources(
     const e = await pkg.json(c.file);
     add(c.id, { kind: "common", text: e.raw_metadata?.name || c.name || c.id });
     page(e.page, c.id, null);
+    yield* rows; rows = [];
   }
   for (const a of pkg.assets || [])
     add(a.id, {
@@ -104,5 +99,17 @@ export async function buildSources(
       used_by: a.used_by || [],
       category: a.category,
     });
+  yield* rows;
+}
+
+export async function buildSources(pkg, game, maps, commons, db, options = {}) {
+  const index = {};
+  let size = 0;
+  for await (const row of sourceRows(pkg, game, maps, commons, db, options)) {
+    if (options.wanted && !options.wanted.has(row.id)) continue;
+    size += JSON.stringify(row).length;
+    if (size > 30e6) throw Error("전체 상태 인덱스가 너무 큽니다. 분석 자료 내보내기는 맵별 분할 방식으로 이용할 수 있습니다.");
+    index[row.id] = row;
+  }
   return index;
 }

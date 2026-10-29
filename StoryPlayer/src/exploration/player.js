@@ -1,3 +1,4 @@
+import {branchSummary} from "./branches.js";
 // Presentation-only cursor. Never evaluates scripts or writes game switches.
 export class StoryCursor {
  constructor({page,state,context,common,rawVisuals=false}){this.rawVisuals=rawVisuals;this.state=structuredClone(state);this.state.pictures={};this.state.storyStatic=true;this.stack=[this.frame(page,context)];this.common=common;this.wait=null;this.done=false;this.steps=0;this.log=[];this.fidelity=[];}
@@ -40,7 +41,15 @@ export class StoryCursor {
     while(f.commands[f.pc]?.raw.code===continuation){const x=f.commands[f.pc++];lines.push(x.raw.parameters[0]);ids.push(x.id);}
     if(lines.length)return this.wait={type:'text',text:lines.join('\n'),lineIds:ids,face:code===101?p[0]:'',faceIndex:p[1]||0,command:c.id};
    }else if([401,405].includes(code))return this.wait={type:'text',text:p[0],lineIds:[c.id],command:c.id};
-   else if(code===102||code===111)return this.wait={type:'choice',choices:code===102?[...p[0],...(f.commands.slice(f.pc).some(x=>x.raw.indent===indent&&x.raw.code===403)?['취소 경로']:[])]:['조건 성립 경로','그 외 경로'],cancelIndex:code===102?p[0].length:-1,cancel:{mode:'disabled'},condition:code===111,frame:f,indent,command:c.id,sourceCondition:code===111?p:null};
+   else if(code===111){
+    const summary=branchSummary(f.commands,f.pc,indent);
+    if(!summary.paths.some(x=>x.content)){
+      this.fidelity.push({kind:'unknown',command:c.id,message:'감상 콘텐츠 없는 조건 구간 생략 — 상태 변경은 실행하지 않음'});
+      f.pc=summary.end+(f.commands[summary.end]?.raw.code===412?1:0);continue;
+    }
+    return this.wait={type:'choice',choices:summary.paths.map((x,i)=>(i?'조건이 맞지 않는 상황':'조건이 맞는 상황')+' · '+x.preview),cancelIndex:-1,cancel:{mode:'disabled'},condition:true,frame:f,indent,command:c.id,sourceCondition:p};
+   }
+   else if(code===102)return this.wait={type:'choice',choices:code===102?[...p[0],...(f.commands.slice(f.pc).some(x=>x.raw.indent===indent&&x.raw.code===403)?['취소 경로']:[])]:['조건 성립 경로','그 외 경로'],cancelIndex:code===102?p[0].length:-1,cancel:{mode:'disabled'},condition:code===111,frame:f,indent,command:c.id,sourceCondition:code===111?p:null};
    else if(code===402&&f.branches[indent]!==p[0])this.jump(f,[402,403,404],indent);
    else if(code===403&&f.branches[indent]!=="cancel")this.jump(f,[404],indent);
    else if(code===411&&f.branches[indent]===0)this.jump(f,[412],indent);

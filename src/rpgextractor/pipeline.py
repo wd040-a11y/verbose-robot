@@ -34,6 +34,7 @@ class Options:
     sensitive_system: bool = False
     game_id: str | None = None
     story_zip: bool = False
+    legacy_story_zip: bool = False
 
     @classmethod
     def story(cls):
@@ -280,9 +281,11 @@ class Extractor:
                 self.finish()
             if self.options.story_zip:
                 with self.metrics.stage("zip") as measure:
-                    self.emit("Story.zip 생성",0,1)
-                    archive=story_package(self.output,self.cancel)
-                    measure["files"]=1;measure["bytes"]=archive.stat().st_size
+                    measure["files"]=0;measure["bytes"]=0
+                    if self.options.legacy_story_zip:
+                        self.emit("선택한 Story.zip 생성",0,1)
+                        archive=story_package(self.output,self.cancel)
+                        measure["files"]=1;measure["bytes"]=archive.stat().st_size
                     self.emit("CG 포함 Game.zip 생성",0,1)
                     game_archive=story_package(self.output,self.cancel,media=True)
                     measure["files"]+=1;measure["bytes"]+=game_archive.stat().st_size

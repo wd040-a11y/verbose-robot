@@ -139,7 +139,7 @@ export async function analysisZip(packageId, index, { maxChars = 50000 } = {}) {
     rows = [];
     size = 0;
   };
-  for (const item of Object.values(index)) {
+  for await (const item of (index[Symbol.asyncIterator] ? index : Object.values(index))) {
     const count = JSON.stringify(item).length;
     if (size + count > maxChars) await emit();
     rows.push(item);

@@ -144,13 +144,34 @@ try{
   await page.getByLabel('감상 모드').selectOption('story');
   await page.getByRole('button',{name:/시작 마을/}).click();
   await page.locator('article').filter({hasText:'표지판 또는 NPC 1'}).getByRole('button',{name:'감상하기',exact:true}).click();
+  await expect(page.locator('.scene-preview').first()).not.toContainText('\\C[');
   await expect(page.locator('.dialogue')).toContainText('폴더에서 바로 감상');
-  await expect(page.locator('.picture-layer img')).toBeVisible();
+  await expect(page.locator('.picture-layer img').first()).toBeVisible();
   await app.close();
   app=await _electron.launch({executablePath:path.resolve(process.env.PLAYER_EXE)});page=await app.firstWindow();page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));
   await page.getByRole('button',{name:/시작 마을/}).click();
   await page.locator('article').filter({hasText:'표지판 또는 NPC 1'}).getByRole('button',{name:'감상하기',exact:true}).click();
-  await expect(page.locator('.picture-layer img')).toBeVisible();
+  await expect(page.locator('.picture-layer img').first()).toBeVisible();
+  await expect(page.locator('.dialogue-speaker')).toHaveText('안내자');
+  const sceneBounds=await page.locator('.scene').boundingBox();
+  for(const image of await page.locator('.picture-layer img').all()){
+    const b=await image.boundingBox();
+    if(b.x<sceneBounds.x-1||b.y<sceneBounds.y-1||b.x+b.width>sceneBounds.x+sceneBounds.width+1||b.y+b.height>sceneBounds.y+sceneBounds.height+1)throw Error('composite CG clipping');
+  }
+  const exported=path.resolve('reports/ExportedGame.zip');
+  await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},exported);
+  await page.getByRole('button',{name:'웹·모바일용 Game.zip 내보내기',exact:true}).click();
+  await expect(page.getByText('Game.zip 저장 완료',{exact:false})).toBeVisible({timeout:30000});
+  if((await fs.stat(exported)).size===0)throw Error('empty exported package');
+  await page.locator('input[type=file]').first().setInputFiles(exported);
+  await page.getByRole('button',{name:/교체/}).click();
+  await expect(page.getByRole('button',{name:/시작 마을/})).toBeVisible();
+  await page.getByRole('button',{name:/시작 마을/}).click();
+  await page.locator('article').filter({hasText:'표지판 또는 NPC 1'}).getByRole('button',{name:'감상하기',exact:true}).click();
+  await expect(page.locator('.scene-preview').first()).not.toContainText('\\C[');
+  await expect(page.locator('.dialogue')).toContainText('폴더에서 바로 감상');
+  await expect(page.locator('.picture-layer img').first()).toBeVisible();
+  await fs.writeFile('reports/export-package.json',JSON.stringify({passed:true,synthetic:true,checks:['save dialog','export ZIP','reimport exported package','dialogue and CG']}));
   await page.screenshot({path:'reports/folder-import.png',fullPage:true});
   await fs.writeFile('reports/folder-import.json',JSON.stringify({passed:true,synthetic:true,checks:['bundled importer','folder picker','automatic extraction','CG without separate ZIP','process restart without ZIP reselection']},null,2));
  }

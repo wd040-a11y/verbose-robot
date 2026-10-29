@@ -306,6 +306,8 @@ export async function importZip(file, progress=()=>{}, existing, options={}) {
     await put("meta", "places-v2:"+id, null);
     const source=replace?Object.fromEntries(await Promise.all(personalPrefixes.map(async key=>[key,await get('meta',key+replace.id)]))):((await savedGames()).filter(x=>x.packageId===manifest.package_id).sort((a,b)=>b.at.localeCompare(a.at))[0]?.saved||{});
     for(const [key,value] of Object.entries(source))if(value!==undefined)await put('meta',key+id,value);
+    const settingsEntry=entries.find(e=>e.filename===m.filename.replace(/manifest.json$/,'')+'player/settings.json');
+    if(settingsEntry){const data=JSON.parse(await (await readEntry(settingsEntry,24*1024**2)).text());await put('meta','portable-settings:'+id,data);}
     await put("meta", id, meta);committed=true;
     if(replace)await removeGame(replace.id,{keepSaves:false});
     return new Package(meta);

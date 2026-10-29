@@ -7,7 +7,25 @@ module.exports=function install(win){
  const ready=(async()=>{await fs.mkdir(root,{recursive:true});try{registry=JSON.parse(await fs.readFile(registryPath,'utf8'));}catch{}})();
  function allowed(e){if(e.sender!==win.webContents||e.senderFrame!==win.webContents.mainFrame)throw Error('허용되지 않은 요청');}
  async function descriptor(token){await ready;const f=registry[token];if(!f||!path.resolve(f).startsWith(path.resolve(root)+path.sep))throw Error('등록된 자료가 없습니다.');const stat=await fs.stat(f);return {token,size:stat.size,name:path.basename(f)};}
- ipcMain.handle('game:open',async(e,token)=>{allowed(e);return descriptor(token);});
+ ipcMain.handle('game:export',async(e,token,settings)=>{
+  allowed(e);await descriptor(token);
+  const source=registry[token];
+  const choice=await dialog.showSaveDialog(win,{title:'웹·모바일용 게임 패키지 저장',defaultPath:'Game.zip',filters:[{name:'게임 패키지',extensions:['zip']}]});
+  if(choice.canceled||!choice.filePath)return {saved:false};
+  const target=path.resolve(choice.filePath);
+  if(target.startsWith(path.resolve(root)+path.sep))throw Error('앱 관리 폴더 밖의 저장 위치를 선택하세요.');
+  const temp=target+'.'+crypto.randomUUID()+'.partial', prefs=temp+'.json';
+  if(!settings||JSON.stringify(settings).length>24e6)throw Error('개인 설정 크기 제한');
+  try{await fs.copyFile(source,temp,require('node:fs').constants.COPYFILE_EXCL);
+   await fs.writeFile(prefs,JSON.stringify(settings),{flag:'wx'});
+   const exe=app.isPackaged?path.join(process.resourcesPath,'importer','RPGGameImport.exe'):path.join(__dirname,'importer','RPGGameImport.exe');
+   await new Promise((resolve,reject)=>{const child=spawn(exe,['--attach-settings',temp,prefs],{windowsHide:true,stdio:'ignore',shell:false});child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Error('개인 설정 저장 실패')));});
+   await fs.rename(temp,target);}
+  catch(err){await fs.rm(temp,{force:true}).catch(()=>{});throw Error('패키지 저장 실패: 저장 공간과 쓰기 권한을 확인하세요.');}
+  finally{await fs.rm(prefs,{force:true}).catch(()=>{});}
+  return {saved:true};
+ });
+ ipcMain.handle('game:open' ,async(e,token)=>{allowed(e);return descriptor(token);});
  ipcMain.handle('game:remove',async(e,token)=>{allowed(e);await ready;await descriptor(token);const archive=registry[token],job=path.dirname(path.dirname(archive));if(path.dirname(job)!==root)throw Error('관리 폴더 경로 오류');delete registry[token];await fs.writeFile(registryPath,JSON.stringify(registry));await fs.rm(job,{recursive:true,force:true});});
  ipcMain.handle('game:read',async(e,token,offset,length)=>{allowed(e);const d=await descriptor(token);if(!Number.isSafeInteger(offset)||!Number.isSafeInteger(length)||offset<0||length<0||length>4*1024**2||offset+length>d.size)throw Error('파일 읽기 범위 오류');const h=await fs.open(registry[token],'r');try{const b=Buffer.alloc(length);const r=await h.read(b,0,length,offset);return new Uint8Array(b.subarray(0,r.bytesRead));}finally{await h.close();}});
  ipcMain.handle('game:import',async(e,candidate)=>{

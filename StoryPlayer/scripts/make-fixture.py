@@ -47,7 +47,7 @@ print('Synthetic fixtures ready')
 # Standalone raw game for the packaged folder-import GUI test.
 native,_=create_game(out/'native-game','MZ')
 m=json.loads((native/'data/Map001.json').read_text(encoding='utf-8'))
-m['events'][1]['pages']=[page([cmd(231,1,'scene',0,0,0,0,100,100,255,0),cmd(401,'폴더에서 바로 감상'),cmd(0)])]
+m['events'][1]['pages']=[page([cmd(231,1,'scene',0,0,0,0,100,100,255,0),cmd(231,2,'scene',0,0,1200,200,100,100,255,0),cmd(401,r'\N<안내자>\C[14]폴더에서 바로 감상\C[0]'),cmd(0)])]
 write(native/'data/Map001.json',m)
 
 # More than 100 real map records for no-search navigation regression.

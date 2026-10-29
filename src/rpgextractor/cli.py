@@ -20,6 +20,7 @@ def main(argv=None):
         export.add_argument("--"+name,action="store_true",help=help_text)
     check=sub.add_parser("validate",help="출력 스키마 검증"); check.add_argument("folder",type=Path)
     sub.add_parser("gui",help="한국어 GUI 시작")
+    export.add_argument("--legacy-story-zip",action="store_true",help="텍스트 전용 Story.zip도 추가 생성")
     args=parser.parse_args(argv)
     try:
         if args.action=="gui":
@@ -37,7 +38,7 @@ def main(argv=None):
             candidate=matches[0]
         options=Options(raw_json=args.mode=="full" and not args.no_raw,plugin_sources=args.mode=="full" and not args.no_scripts,images=not args.no_images,decrypt=not args.no_decrypt,
                         audio=args.audio,movies=args.movies,llm=args.mode=="full" and not args.no_llm,keep_tiles=not args.no_tiles,
-                        sensitive_system=args.sensitive_system,game_id=args.game_id,detailed_reports=args.mode=="full",story_zip=True)
+                        sensitive_system=args.sensitive_system,game_id=args.game_id,detailed_reports=args.mode=="full",story_zip=True,legacy_story_zip=args.legacy_story_zip)
         def progress(stage,current,total,errors):
             if current % 50==0 or current==total: print(f"[{current}/{total}] {stage} (오류 {errors})",file=sys.stderr)
         result=Extractor(options,progress).run(args.folder,args.output,candidate)

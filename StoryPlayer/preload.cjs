@@ -1,6 +1,7 @@
 const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('localGames',{
  importFolder:(candidate)=>ipcRenderer.invoke('game:import',candidate),
+ exportPackage:(token,settings)=>ipcRenderer.invoke('game:export',token,settings),
  remove:token=>ipcRenderer.invoke('game:remove',token),
  open:token=>ipcRenderer.invoke('game:open',token),
  read:(token,offset,length)=>ipcRenderer.invoke('game:read',token,offset,length),

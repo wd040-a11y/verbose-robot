@@ -26,6 +26,10 @@ export function tokenize(text) {
       while (i < text.length && /[A-Za-z]/.test(text[i])) code += text[i++];
     } else code = text[i++] || "";
     let arg = null;
+    if(code.toUpperCase()==='N' && text[i]==='<'){
+      const end=text.indexOf('>',i+1);
+      if(end>=0){out.push({type:'speaker',text:text.slice(i+1,end),raw:text.slice(start,end+1)});i=end+1;continue;}
+    }
     if (text[i] === "[") {
       const end = text.indexOf("]", i);
       if (end >= 0) {
@@ -45,8 +49,8 @@ export function tokenize(text) {
 }
 export function tokenSignature(text) {
   return tokenize(text)
-    .filter((t) => t.type === "control")
-    .map((t) => `${t.code}[${t.arg ?? ""}]`);
+    .filter((t) => t.type === "control" || t.type === "speaker")
+    .map((t) => t.type === "speaker" ? t.raw : `${t.code}[${t.arg ?? ""}]`);
 }
 export function compatibleTranslation(original, translated) {
   return (
@@ -65,7 +69,7 @@ export function resolveTokens(
   } = {},
 ) {
   return tokens.map((t) => {
-    if (t.type === "text") return t;
+    if (t.type === "text" || t.type === "speaker") return t;
     const n = Number(t.arg),
       valid = /^\d+$/.test(t.arg ?? "");
     if (state.storyStatic && ["V","P"].includes(t.code)) return {type:"text",text:t.raw,warning:"정적 감상: 동적 값 미확정"};
@@ -106,4 +110,19 @@ export function palettePoint(engine, n) {
     x: (ace ? 64 : 96) + (n % 8) * cell + cell / 2,
     y: (ace ? 96 : 144) + Math.floor(n / 8) * cell + cell / 2,
   };
+}
+
+// Navigation is a plain-text summary; the original text remains untouched.
+export function previewText(text) {
+  return tokenize(text).map(t => {
+    if (t.type === 'text') return t.text;
+    if (t.type === 'speaker') return t.text+' · ';
+    if (['C','FS','{','}','.','|','!','>','<','^','$'].includes(t.code)) return '';
+    if (t.code === 'I') return '[아이콘]';
+    if (t.code === 'V') return '[변수 '+t.arg+']';
+    if (t.code === 'N') return '[인물 '+t.arg+']';
+    if (t.code === 'P') return '[파티원 '+t.arg+']';
+    if (t.code === 'G') return '[화폐]';
+    return '[미지원 효과]';
+  }).join('').replace(/\s+/g,' ').trim();
 }
