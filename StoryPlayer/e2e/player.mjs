@@ -171,6 +171,7 @@ try{
   const nativeRow=page.getByRole('dialog').locator('article').filter({hasText:'2개 장소'});
   await nativeRow.getByLabel('게임 이름',{exact:true}).fill('휴대용 이름 확인');
   await nativeRow.getByRole('button',{name:'게임 이름 저장',exact:true}).click();
+  await page.screenshot({path:'reports/composite-cg.png',fullPage:true});
   const exported=path.resolve('reports/ExportedGame.zip');
   await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},exported);
   await page.getByRole('button',{name:'웹·모바일용 Game.zip 내보내기',exact:true}).click();
@@ -178,6 +179,7 @@ try{
   if((await fs.stat(exported)).size===0)throw Error('empty exported package');
   await page.locator('input[type=file]').first().setInputFiles(exported);
   await page.getByRole('button',{name:/교체/}).click();
+  await expect(page.getByLabel('게임 추출 ZIP',{exact:true})).toBeEnabled({timeout:60000});
   await expect(page.getByRole('button',{name:/시작 마을/})).toBeVisible();
   await page.getByRole('button',{name:/시작 마을/}).click();
   await page.locator('article').filter({hasText:'표지판 또는 NPC 1'}).getByRole('button',{name:'감상하기',exact:true}).click();
