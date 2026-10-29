@@ -357,7 +357,7 @@ async function manageGames(){
  const duplicates=rows.filter(x=>x.manifest.package_id===row.manifest.package_id).length;
  el('p',`${row.manifest.engine} · ${row.created?.slice(0,10)||''} · ${row.maps}개 장소${duplicates>1?' · 같은 패키지 '+duplicates+'개':''}`,box);
  const rename=input(box,'게임 이름');rename.value=row.title;
- button('게임 이름 저장',async()=>{const value=rename.value.trim();if(!value)return;const m=await get('meta',row.id);m.title=value;await put('meta',row.id,m);await refreshGames();if(c.pkg)games.value=c.pkg.id;d.close();},box);
+ button('게임 이름 저장',async()=>{const value=rename.value.trim();if(!value)return;const m=await get('meta',row.id);m.title=value;await put('meta','custom-title:'+row.id,value);await put('meta',row.id,m);await refreshGames();if(c.pkg)games.value=c.pkg.id;d.close();},box);
  button('숨긴 장소·장면 다시 표시',async()=>{await put('meta','hidden:'+row.id,{maps:[],events:[]});if(c.pkg?.id===row.id){c.hidden={maps:[],events:[]};renderMaps();renderEvents();}d.close();},box);
  const keep=el('label' ,null,box),check=input(keep,'감상 상태 보관','checkbox');check.checked=true;el('span','삭제 후에도 저장·번역·기록 보관 (동일 패키지 재등록 시 복원)',keep);
  button('이 게임 삭제',async()=>{
@@ -407,6 +407,7 @@ async function load(id) {
   c.pkg.assets = await c.pkg.json("normalized/assets.json");
   c.pkg.commons = await c.pkg.json("normalized/common_events.json");
   c.placeIndex=(await get("meta","places-v2:"+id)) || await indexPlaces(c.pkg,c.maps,common,(n,total)=>c.status(`장소 콘텐츠 확인 ${n}/${total}`));
+  if(Object.values(c.placeIndex).some(x=>x.count>0&&!x.contentEventIds))c.placeIndex=await indexPlaces(c.pkg,c.maps,common);
   await put("meta","places-v2:"+id,c.placeIndex);
   c.db = await actorDatabase(c.pkg);
   c.db.Items = await database(c.pkg, "Items");
@@ -417,7 +418,7 @@ async function load(id) {
     const checked=await checkedAnalysis(settings.analysis,c);
     c.enrichment=mergeResults(c.enrichment,checked);c.placeNames=settings.placeNames;c.hidden=settings.hidden;
     m.title=settings.title;c.pkg.title=m.title;
-    await put('meta',id,m);await put('meta','place-names:'+id,c.placeNames);await put('meta','hidden:'+id,c.hidden);await c.saveEnrichment();await refreshGames();games.value=id;
+    await put('meta',id,m);await put('meta','custom-title:'+id,m.title);await put('meta','place-names:'+id,c.placeNames);await put('meta','hidden:'+id,c.hidden);await c.saveEnrichment();await refreshGames();games.value=id;
    }catch(error){m.settingsWarning='포함된 개인 설정은 적용하지 못했습니다: '+error.message;}
    await put('meta','portable-settings:'+id,null);
   }
@@ -447,10 +448,11 @@ async function clearPlayer() {
   dialogue.textContent = "장소와 장면을 선택하고 감상하기를 누르세요.";
   sessionBadge.textContent = "";
 }
+function placeCount(m){const info=c.placeIndex?.[m.map_id];return info?.contentEventIds?info.contentEventIds.filter(id=>!(c.hidden?.events||[]).includes(id)).length:info?.count;}
 function renderMaps() {
   mapList.replaceChildren();
   const query=globalSearch.value.toLowerCase();
-  const rows=c.maps.filter(m=>{const info=c.placeIndex?.[m.map_id];return (placeFilter.value==='all'||(!(c.hidden?.maps||[]).includes(m.map_id)&&info?.count>0))&&(!query||((info?.text||m.name||'')+' '+placeName(m,c.placeNames,c.text('map:'+m.map_id,m.name)).text).toLowerCase().includes(query));});
+  const rows=c.maps.filter(m=>{const info=c.placeIndex?.[m.map_id];return (placeFilter.value==='all'||(!(c.hidden?.maps||[]).includes(m.map_id)&&placeCount(m)>0))&&(!query||((info?.text||m.name||'')+' '+placeName(m,c.placeNames,c.text('map:'+m.map_id,m.name)).text).toLowerCase().includes(query));});
   if(!rows.length&&c.maps.length)el('p','감상 콘텐츠가 확인된 장소가 없습니다. 전체 장소 또는 다른 검색어를 확인하세요.',mapList);
   if(c.currentMap)button('현재 장소 숨기기',async()=>{c.hidden.maps.push(c.currentMap.map_id);await put('meta','hidden:'+c.pkg.id,c.hidden);renderMaps();},mapList,'subtle');
   let shown = 0;
@@ -458,7 +460,7 @@ function renderMaps() {
   function appendMaps() {
   for (const m of rows.slice(shown, shown + 100)) {
     const b = button(
-      placeName(m,c.placeNames,c.text("map:"+m.map_id,m.name)).text+` · ${c.placeIndex?.[m.map_id]?.count ?? "미확정"}장면${c.placeIndex?.[m.map_id]?.uncertain ? " · 분석 미확정" : ""}`,
+      placeName(m,c.placeNames,c.text("map:"+m.map_id,m.name)).text+` · ${placeCount(m) ?? "미확정"}장면${c.placeIndex?.[m.map_id]?.uncertain ? " · 분석 미확정" : ""}`,
       () => chooseMap(m),
       mapList,
     );
@@ -553,7 +555,7 @@ async function renderEvents() {
         row,
       );
       button("감상하기", () => watch(e), row, "primary");
-      button("이 장면 숨기기",async()=>{c.hidden.events.push(e.id);await put('meta','hidden:'+c.pkg.id,c.hidden);renderEvents();},row,'subtle');
+      button("이 장면 숨기기",async()=>{c.hidden.events.push(...same.map(x=>x.id));await put('meta','hidden:'+c.pkg.id,c.hidden);renderMaps();renderEvents();},row,'subtle');
       button("상황 선택", () => { if(mode!=="story") return conditionDialog(e); const d=modal("감상할 상황 선택");e.pages.forEach((p,i)=>c.infos.get(e.id)?.entries[i]?.content&&button(`상황 ${i+1} · ${previewText(c.infos.get(e.id)?.entries[i]?.texts.find(x=>x.text)?.text||c.infos.get(e.id)?.entries[i]?.category||"미분류").slice(0,70)}${c.infos.get(e.id)?.entries[i]?.content?"":" · 감상 콘텐츠 없음"}`,async()=>{d.close();await start(e,i,clone(c.world),true,["페이지 직접 감상 · 도달 가능성 미확정"]);},d)); }, row, "subtle");
       details(row, "고급 · 원본 식별 정보", {
         map: c.currentMap.map_id,

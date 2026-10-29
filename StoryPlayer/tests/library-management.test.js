@@ -6,10 +6,10 @@ import {importZip,library,removeGame,put,get} from '../src/storage.js';
 import {placeName} from '../src/localization/places.js';
 const zip=async()=>new Blob([await fs.readFile(new URL('../fixtures/sample.zip',import.meta.url))]);
 test('replace exact package preserves saves; deletion preserves opt-in state and removes files',async()=>{
- const p=await importZip(await zip());await put('meta','state:'+p.id,{variables:{3:42}});await put('meta','place-names:'+p.id,{'1':'내 마을'});
+ const p=await importZip(await zip());await put('meta','state:'+p.id,{variables:{3:42}});await put('meta','place-names:'+p.id,{'1':'내 마을'});await put('meta','custom-title:'+p.id,'내 이름');
  const q=await importZip(await zip(),()=>{},undefined,{onDuplicate:async rows=>{assert.equal(rows[0].id,p.id);return 'replace';}});
  assert.equal((await library()).some(x=>x.id===p.id),false);assert.equal(await get('files',p.id+'/normalized/maps.json'),undefined);
- assert.deepEqual(await get('meta','state:'+q.id),{variables:{3:42}});
+ assert.deepEqual(await get('meta','state:'+q.id),{variables:{3:42}});assert.equal((await get('meta',q.id)).title,'내 이름');
  await removeGame(q.id);assert.equal((await library()).length,0);
  const r=await importZip(await zip());assert.equal((await get('meta','state:'+r.id)).variables[3],42);assert.equal((await get('meta','place-names:'+r.id))['1'],'내 마을');
  await removeGame(r.id,{keepSaves:false});
