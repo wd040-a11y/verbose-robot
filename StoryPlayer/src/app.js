@@ -418,7 +418,7 @@ async function load(id) {
     c.enrichment=mergeResults(c.enrichment,checked);c.placeNames=settings.placeNames;c.hidden=settings.hidden;
     m.title=settings.title;c.pkg.title=m.title;
     await put('meta',id,m);await put('meta','place-names:'+id,c.placeNames);await put('meta','hidden:'+id,c.hidden);await c.saveEnrichment();await refreshGames();games.value=id;
-   }catch(error){c.status('게임은 등록됐지만 포함된 개인 설정은 적용하지 못했습니다: '+error.message);}
+   }catch(error){m.settingsWarning='포함된 개인 설정은 적용하지 못했습니다: '+error.message;}
    await put('meta','portable-settings:'+id,null);
   }
 
@@ -433,7 +433,7 @@ async function load(id) {
   renderMaps();
   renderTimeline();
   eventList.replaceChildren();
-  c.status(`${m.title} · 맵 ${c.maps.length}개 · 자유롭게 장소를 선택하세요.`);
+  c.status(`${m.title} · 맵 ${c.maps.length}개 · 자유롭게 장소를 선택하세요.${m.settingsWarning ? " · "+m.settingsWarning : ""}`);
   openTab("감상");
 }
 async function clearPlayer() {
@@ -554,7 +554,7 @@ async function renderEvents() {
       );
       button("감상하기", () => watch(e), row, "primary");
       button("이 장면 숨기기",async()=>{c.hidden.events.push(e.id);await put('meta','hidden:'+c.pkg.id,c.hidden);renderEvents();},row,'subtle');
-      button("상황 선택", () => { if(mode!=="story") return conditionDialog(e); const d=modal("감상할 상황 선택");e.pages.forEach((p,i)=>c.infos.get(e.id)?.entries[i]?.content&&button(`상황 ${i+1} · ${c.infos.get(e.id)?.entries[i]?.category||"미분류"}${c.infos.get(e.id)?.entries[i]?.content?"":" · 감상 콘텐츠 없음"}`,async()=>{d.close();await start(e,i,clone(c.world),true,["페이지 직접 감상 · 도달 가능성 미확정"]);},d)); }, row, "subtle");
+      button("상황 선택", () => { if(mode!=="story") return conditionDialog(e); const d=modal("감상할 상황 선택");e.pages.forEach((p,i)=>c.infos.get(e.id)?.entries[i]?.content&&button(`상황 ${i+1} · ${previewText(c.infos.get(e.id)?.entries[i]?.texts.find(x=>x.text)?.text||c.infos.get(e.id)?.entries[i]?.category||"미분류").slice(0,70)}${c.infos.get(e.id)?.entries[i]?.content?"":" · 감상 콘텐츠 없음"}`,async()=>{d.close();await start(e,i,clone(c.world),true,["페이지 직접 감상 · 도달 가능성 미확정"]);},d)); }, row, "subtle");
       details(row, "고급 · 원본 식별 정보", {
         map: c.currentMap.map_id,
         event: e.id,

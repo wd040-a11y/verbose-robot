@@ -127,6 +127,15 @@ try{
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.locator('.status')).toContainText('자유롭게 장소를 선택하세요');
  await expect(page.getByLabel('등록된 게임').locator('option')).toHaveCount(1);
+ await page.getByRole('button',{name:'AI 분석',exact:true}).click();
+ const analysisDownload=page.waitForEvent('download');
+ await page.getByRole('button',{name:'AI 분석 준비',exact:true}).click();
+ await (await analysisDownload).saveAs(`reports/analysis-${mode}.zip`);
+ await page.getByRole('button',{name:'감상',exact:true}).click();
+ await page.getByRole('button',{name:'게임 관리',exact:true}).click();
+ await page.getByLabel('게임 이름',{exact:true}).fill('이름 변경 확인');
+ await page.getByRole('button',{name:'게임 이름 저장',exact:true}).click();
+ await expect(page.getByLabel('등록된 게임').locator('option:checked')).toHaveText('이름 변경 확인');
  await page.getByRole('button',{name:'게임 관리',exact:true}).click();
  await page.getByRole('button',{name:'이 게임 삭제',exact:true}).click();
  await page.getByRole('button',{name:'삭제 확인',exact:true}).click();
@@ -158,6 +167,10 @@ try{
     const b=await image.boundingBox();
     if(b.x<sceneBounds.x-1||b.y<sceneBounds.y-1||b.x+b.width>sceneBounds.x+sceneBounds.width+1||b.y+b.height>sceneBounds.y+sceneBounds.height+1)throw Error('composite CG clipping');
   }
+  await page.getByRole('button',{name:'게임 관리',exact:true}).click();
+  const nativeRow=page.getByRole('dialog').locator('article').filter({hasText:'2개 장소'});
+  await nativeRow.getByLabel('게임 이름',{exact:true}).fill('휴대용 이름 확인');
+  await nativeRow.getByRole('button',{name:'게임 이름 저장',exact:true}).click();
   const exported=path.resolve('reports/ExportedGame.zip');
   await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},exported);
   await page.getByRole('button',{name:'웹·모바일용 Game.zip 내보내기',exact:true}).click();
@@ -171,6 +184,7 @@ try{
   await expect(page.locator('.scene-preview').first()).not.toContainText('\\C[');
   await expect(page.locator('.dialogue')).toContainText('폴더에서 바로 감상');
   await expect(page.locator('.picture-layer img').first()).toBeVisible();
+  await expect(page.getByLabel('등록된 게임').locator('option:checked')).toHaveText('휴대용 이름 확인');
   await fs.writeFile('reports/export-package.json',JSON.stringify({passed:true,synthetic:true,checks:['save dialog','export ZIP','reimport exported package','dialogue and CG']}));
   await page.screenshot({path:'reports/folder-import.png',fullPage:true});
   await fs.writeFile('reports/folder-import.json',JSON.stringify({passed:true,synthetic:true,checks:['bundled importer','folder picker','automatic extraction','CG without separate ZIP','process restart without ZIP reselection']},null,2));

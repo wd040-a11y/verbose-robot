@@ -519,10 +519,10 @@ export async function resourcesPanel(parent, c) {
 }
 export async function analysisPanel(parent, c) {
   parent.replaceChildren();
-  el("h2", "AI 분석과 한국어 번역", parent);
+  el("h2", "오프라인 번역·분석 자료", parent);
   el(
     "p",
-    "유료 API 없이 사용합니다. 작업 ZIP을 준비해 ChatGPT에 전달하고, 고정 지침에 맞춘 결과 JSON을 다시 가져오세요. 원본 명령은 수정하지 않습니다.",
+    "이 버튼은 자동 번역이나 전체 스토리 정렬을 실행하지 않습니다. 장소·인물·대사 번역과 의미 설명을 위한 작업 ZIP을 만듭니다. 결과 JSON을 가져오면 검증 후 표시 이름·번역·분류에 적용합니다. 외부 API 호출은 없습니다. Windows의 Game.zip 내보내기에는 적용한 분석 결과도 포함됩니다.",
     parent,
   );
   const counts = Object.values(c.enrichment.items || {});
