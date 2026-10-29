@@ -32,6 +32,9 @@ def validate_value(value):
 def validate_package(folder:Path,cancel=lambda:None,progress=lambda *args:None,only=None,stats=None):
     folder=Path(folder); errors=[]; stats=stats if stats is not None else {}
     stats.update(files=0,bytes=0,records=0,scope='changed_reports' if only is not None else 'full')
+    try: validators()
+    except (OSError,ValueError):
+        return [{'path':'schemas/package.schema.json','message':'프로그램의 검증 스키마를 읽을 수 없습니다. 전체 배포본을 다시 설치하거나 압축을 모두 풀어 주세요.'}]
     if only is None:
         for name in REQUIRED:
             cancel()
